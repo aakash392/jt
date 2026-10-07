@@ -1018,6 +1018,11 @@ class TranslationProgress:
     OUT_RATIO = {"en": 0.6, "ja": 0.95, "fix": 0.8}  # "fix": corrected English is about as long as the message
     READ_SECONDS = 1.5
     WRITE_RATE = 13.0
+    # Reading this much longer than expected means the Mac is swapping: Ollama's saved prompts are being brought back
+    # from disk (seen 7 Oct: 30-100 s while Docker containers started or stopped). Say so instead of looking stuck.
+    SLOW_AFTER = 15
+    SLOW_NOTE = ("Your Mac is short on memory right now, so this one is slower (Docker containers starting or "
+                 "stopping often cause this). It can take a minute or two; the result will pop up.")
 
     def __init__(self, window, text, tgt, title):
         self.window, self.title = window, title
@@ -1048,7 +1053,13 @@ class TranslationProgress:
                 return
             if self.window.cancelled():
                 return  # jt notices at the next piece of text
-            elapsed = time.time() - self.t0
+            self._reading_update()
+
+    def _reading_update(self):
+        elapsed = time.time() - self.t0
+        if elapsed > self.read_seconds + self.SLOW_AFTER:
+            self.window.update(percent=15.0, status="Still working, slower than usual…", text=self.SLOW_NOTE)
+        else:
             self.window.update(percent=min(15.0, 15.0 * elapsed / self.read_seconds), status=self._reading_status())
 
     def _reading_status(self):
