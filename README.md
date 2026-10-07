@@ -7,6 +7,8 @@ so terms like 反映, ロボット and カラム come out the way our team uses 
 **It is a draft, not a final answer.** Before acting on a translation or sending one,
 read it once. For anything important, use `--check`.
 
+**User guide:** https://jt-guide.vercel.app/ (install, hotkey setup, every command, troubleshooting).
+
 ## Install (macOS, 16 GB RAM or more)
 
 1. Install Ollama from https://ollama.com/download and open it once.
