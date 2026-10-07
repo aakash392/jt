@@ -227,7 +227,7 @@ def _file_text(path):
 def cache_key(text, target, fmt):
     """Everything that can change the hotkey's result: the message, forced direction, format, model and load settings,
     the prompts, glossaries and examples. Change any of them and old entries simply stop matching."""
-    parts = [text, str(target), fmt, MODEL, json.dumps(LOAD_OPTIONS, sort_keys=True), RULES, json.dumps(STYLE),
+    parts = [text, str(target), fmt, active_model(), json.dumps(LOAD_OPTIONS, sort_keys=True), RULES, json.dumps(STYLE),
              PROJECT_HEADER, FIX_PROMPT, json.dumps(FIX_EXAMPLES), str(SHORT_ENGLISH_WORDS)]
     parts += [_file_text(f) for f in (GLOSSARY_FILE, PROJECT_FILE, EXAMPLES_FILE)]
     return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
@@ -464,12 +464,14 @@ def ollama_up(timeout=1.5):
 
 
 _start_tried = False
+_copy_remade = False
 
 
 OLLAMA_APPS = (Path("/Applications/Ollama.app"), Path.home() / "Applications" / "Ollama.app")  # where install.sh puts it
 # Where Homebrew and the Ollama app put the command. The hotkey runs with a minimal PATH (no /opt/homebrew/bin),
 # so jt looks in these places too, not only on the PATH.
-OLLAMA_COMMANDS = ("/opt/homebrew/bin/ollama", "/usr/local/bin/ollama")
+OLLAMA_COMMANDS = ("/opt/homebrew/bin/ollama", "/usr/local/bin/ollama") + tuple(
+    str(a / "Contents" / "Resources" / "ollama") for a in OLLAMA_APPS)
 
 
 def ollama_command():
@@ -478,6 +480,62 @@ def ollama_command():
         if path and os.access(path, os.X_OK):
             return path
     return None
+
+
+# Ollama 0.40 can't load the image part (its "CLIP model") of gemma4:12b-it-qat: "image_max_pixels (147456) is less
+# than image_min_pixels (161280)" (found 7 Oct 2026; older Ollama loads it fine). jt never sends images, so on such an
+# Ollama it makes a text-only copy of the model once (the same weights file, without the image part; nothing is
+# downloaded) and uses that from then on. Self-test 28/28 with the copy on Ollama 0.40.0.
+def text_only_name(model):
+    name, _, tag = model.partition(":")
+    return "%s-text:%s" % (name, tag or "latest")
+
+
+def active_model():
+    """The model jt sends requests to: MODEL, or its text-only copy on an Ollama that can't load MODEL's image part."""
+    return text_only_name(MODEL) if load_settings().get("text_only_for") == MODEL else MODEL
+
+
+def image_part_failed(error_body):
+    low = error_body.lower()
+    return "clip model" in low or "mmproj" in low
+
+
+def use_text_only_copy():
+    """Make the text-only copy of MODEL (if it isn't there yet) and use it from now on, on this Mac."""
+    try:
+        with urllib.request.urlopen(urllib.request.Request(
+                HOST + "/api/show", data=json.dumps({"model": MODEL}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}), timeout=30) as resp:
+            modelfile = json.loads(resp.read().decode("utf-8")).get("modelfile", "")
+    except (OSError, ValueError) as e:
+        raise JtError("Ollama couldn't load the model's image part, and jt couldn't read the model to work around it: %s" % e)
+    sources = re.findall(r"^FROM (.+)$", modelfile, flags=re.M)
+    files = [f for f in sources if os.path.isfile(f)]
+    cli = ollama_command()
+    if len(files) < 2 or not cli:
+        raise JtError("This version of Ollama can't load the model's image part (jt doesn't use it). Reinstall the "
+                      "model with:  ollama pull %s   or install an older Ollama." % MODEL)
+    weights = max(files, key=os.path.getsize)  # the language model; the small file is the image part
+    lines = [l for l in modelfile.splitlines() if not (l.startswith("FROM ") and l[5:].strip() != weights)]
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    path = STATE_DIR / "text-only.Modelfile"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    env = dict(os.environ, OLLAMA_HOST=HOST)
+    try:
+        res = subprocess.run([cli, "create", text_only_name(MODEL), "-f", str(path)], capture_output=True, env=env,
+                             timeout=600)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise JtError("couldn't make the text-only copy of the model: %s" % e)
+    finally:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    if res.returncode != 0:
+        raise JtError("couldn't make the text-only copy of the model: %s"
+                      % res.stderr.decode("utf-8", "replace").strip()[-300:])
+    save_setting("text_only_for", MODEL)
 
 
 def start_ollama(wait=20):
@@ -508,9 +566,9 @@ def start_ollama(wait=20):
 def chat(messages, progress=None):
     """One request to Ollama. With a `progress` (TranslationProgress), the answer is streamed so the progress window
     can show it being written; otherwise it arrives in one piece."""
-    global _think_param_ok, _start_tried
+    global _think_param_ok, _start_tried, _copy_remade
     payload = {
-        "model": MODEL,
+        "model": active_model(),
         "messages": messages,
         "stream": progress is not None,
         "keep_alive": keep_alive(),
@@ -543,6 +601,15 @@ def chat(messages, progress=None):
         e.close()
         if _think_param_ok and "think" in body.lower():
             _think_param_ok = False  # older Ollama or a model without a thinking switch
+            return chat(messages, progress)
+        if image_part_failed(body) and active_model() == MODEL:
+            if progress is not None:
+                progress.phase("Preparing the model (one time only)…", extra_seconds=15)
+            use_text_only_copy()
+            return chat(messages, progress)
+        if (e.code == 404 or "not found" in body.lower()) and active_model() != MODEL and not _copy_remade:
+            _copy_remade = True  # the text-only copy was deleted: make it again (once per run)
+            use_text_only_copy()
             return chat(messages, progress)
         if e.code == 404 or "not found" in body.lower():
             raise JtError("model '%s' isn't installed. Run:  ollama pull %s" % (MODEL, MODEL))
@@ -1021,7 +1088,7 @@ def model_loaded():
             names = [m.get("name", "") for m in json.loads(resp.read().decode("utf-8")).get("models", [])]
     except Exception:
         return None
-    return full_name(MODEL) in names
+    return full_name(active_model()) in names
 
 
 def full_name(model):
@@ -1258,7 +1325,7 @@ def mode_selftest():
             for p in problems:
                 print("      - " + p)
     print("\n%d/%d passed  (%s; model: %s)" % (passed, len(tests),
-                                              ", ".join("%s %d/%d" % (k, v[0], v[1]) for k, v in kinds.items()), MODEL))
+                                              ", ".join("%s %d/%d" % (k, v[0], v[1]) for k, v in kinds.items()), active_model()))
     if len(times) > 1:
         print("speed: first %.1fs (includes loading the model if it was not loaded), then median %.1fs per message"
               % (times[0], median(times[1:])))
@@ -1277,6 +1344,9 @@ def mode_doctor():
     wanted = full_name(MODEL)
     if wanted in names:
         print("Model       : %s installed" % MODEL)
+        if active_model() != MODEL:
+            print("              using its text-only copy %s (this Ollama can't load the model's image part, "
+                  "which jt doesn't use)" % active_model())
     else:
         print("Model       : %s NOT installed - run: ollama pull %s" % (MODEL, MODEL))
     print("Glossary    : %d terms (%s)" % (len(load_glossary()), GLOSSARY_FILE.name))
@@ -1353,17 +1423,29 @@ def warm_in_background(skip):
         pass  # only an optimisation
 
 
-def mode_warm():
-    """Load the model into memory now (with the same settings translations use) and warm all three prompts, so the
-    next translation of any kind is fast."""
-    payload = {"model": MODEL, "messages": [], "keep_alive": keep_alive(), "options": LOAD_OPTIONS}
+def load_model():
+    """Load the model into memory with the same settings translations use (switching to the text-only copy if this
+    Ollama can't load the model's image part)."""
+    payload = {"model": active_model(), "messages": [], "keep_alive": keep_alive(), "options": LOAD_OPTIONS}
     req = urllib.request.Request(HOST + "/api/chat", data=json.dumps(payload).encode("utf-8"),
                                  headers={"Content-Type": "application/json"})
-    t0 = time.time()
     try:
         urllib.request.urlopen(req, timeout=300).read()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")
+        e.close()
+        if image_part_failed(body) and active_model() == MODEL:
+            use_text_only_copy()
+            return load_model()
+        raise JtError("couldn't load the model: Ollama returned an error (%s): %s" % (e.code, body))
     except Exception as e:
         raise JtError("couldn't load the model: %s" % e)
+
+
+def mode_warm():
+    """Load the model into memory now and warm all three prompts, so the next translation of any kind is fast."""
+    t0 = time.time()
+    load_model()
     loaded = time.time() - t0
     warm_prompts()
     print("Model loaded in %.1fs and warmed up in %.1fs; it stays ready for %s after the last use."
@@ -1373,7 +1455,7 @@ def mode_warm():
 def unload_model():
     """Remove the model from memory now. Returns True if it was loaded. It reloads on the next translation."""
     was_loaded = model_loaded()
-    payload = {"model": MODEL, "messages": [], "keep_alive": 0}
+    payload = {"model": active_model(), "messages": [], "keep_alive": 0}
     req = urllib.request.Request(HOST + "/api/chat", data=json.dumps(payload).encode("utf-8"),
                                  headers={"Content-Type": "application/json"})
     try:

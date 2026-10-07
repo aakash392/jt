@@ -88,6 +88,11 @@ echo "Ollama is running."
 echo "Downloading $MODEL (about 7.2 GB, first time only)..."
 "$OLLAMA" pull "$MODEL"
 
+# Load it once now, so any one-time preparation happens here rather than on the first hotkey press (for example,
+# Ollama 0.40 can't load this model's image part, so jt makes a text-only copy of it).
+echo "Loading the model once to check that it works (about a minute)..."
+python3 "$DIR/jt.py" --warm || echo "It didn't load yet. jt will try again on the first translation."
+
 chmod +x "$DIR/jt.py"
 
 case "$(basename "${SHELL:-zsh}")" in

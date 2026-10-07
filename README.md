@@ -164,5 +164,6 @@ This gives you the latest jt, glossary, examples and tests (no reinstall needed)
 | can't reach Ollama | jt tries to start it; if that fails, open the Ollama app (menu bar icon) |
 | Translations are sometimes slow (10–20 s) | `jt --doctor` shows swap in use. The Mac is short on memory and the model was swapped out: close apps or lower Docker's memory limit |
 | model isn't installed | `ollama pull gemma4:12b-it-qat` |
+| "Failed to load CLIP model" | Your Ollama can't load the model's image part (Ollama 0.40 with this model). Update jt (`cd ~/jt && git pull`): it then makes a text-only copy of the model once (about 20 seconds, nothing downloaded) and uses that. |
 | Japanese shows as garbage in the hotkey | Make sure the command uses `/usr/bin/python3` and the `jt.py` from this folder |
 | Slow first translation | Normal: the model loads into memory (a few seconds), then it stays ready for 8 hours after the last use (about 7.6 GB of RAM while loaded; freed after 8 idle hours or at shutdown). Run `jt --warm` to load it ahead of time. Memory tight? `jt --keep-loaded 30m` |
