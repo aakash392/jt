@@ -466,19 +466,34 @@ def ollama_up(timeout=1.5):
 _start_tried = False
 
 
+OLLAMA_APPS = (Path("/Applications/Ollama.app"), Path.home() / "Applications" / "Ollama.app")  # where install.sh puts it
+# Where Homebrew and the Ollama app put the command. The hotkey runs with a minimal PATH (no /opt/homebrew/bin),
+# so jt looks in these places too, not only on the PATH.
+OLLAMA_COMMANDS = ("/opt/homebrew/bin/ollama", "/usr/local/bin/ollama")
+
+
+def ollama_command():
+    """The `ollama` command on this Mac, or None."""
+    for path in [shutil.which("ollama")] + list(OLLAMA_COMMANDS):
+        if path and os.access(path, os.X_OK):
+            return path
+    return None
+
+
 def start_ollama(wait=20):
     """Start Ollama if it isn't running (the Mac app, or `ollama serve`) and wait until it answers.
     Only for an Ollama on this computer; True if it's up."""
     if not re.match(r"https?://(127\.0\.0\.1|localhost|\[::1\])(:|$)", HOST):
         return False
     try:
-        if platform.system() == "Darwin" and Path("/Applications/Ollama.app").exists():
-            subprocess.run(["open", "-g", "-a", "Ollama"], capture_output=True)
-        elif shutil.which("ollama"):
+        app = next((a for a in OLLAMA_APPS if a.exists()), None) if platform.system() == "Darwin" else None
+        cli = ollama_command()
+        if app:
+            subprocess.run(["open", "-g", "-a", str(app)], capture_output=True)
+        elif cli:
             STATE_DIR.mkdir(parents=True, exist_ok=True)
             with open(str(STATE_DIR / "ollama.log"), "ab") as out:
-                subprocess.Popen([shutil.which("ollama"), "serve"], stdout=out, stderr=out, stdin=subprocess.DEVNULL,
-                                 start_new_session=True)
+                subprocess.Popen([cli, "serve"], stdout=out, stderr=out, stdin=subprocess.DEVNULL, start_new_session=True)
         else:
             return False
     except OSError:

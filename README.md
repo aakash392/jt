@@ -13,14 +13,15 @@ read it once. For anything important, use `--check`.
 
 ## Install (macOS, 16 GB RAM or more)
 
-1. Install Ollama from https://ollama.com/download and open it once.
-2. In Terminal, download jt into `~/jt` (the hotkey expects it there) and run the setup:
+1. In Terminal, download jt into `~/jt` (the hotkey expects it there) and run the setup:
    ```bash
    git clone https://github.com/aakash392/jt.git ~/jt
    bash ~/jt/install.sh
    ```
-   This downloads the model (about 7.2 GB, first time only) and adds a `jt` command.
-3. Open a new Terminal window and run `jt --doctor`. Everything should say installed/running.
+   The setup does everything: it installs Ollama if you don't have it (the official Mac app from ollama.com, about
+   200 MB), starts it, downloads the model (about 7.2 GB, first time only), adds a `jt` command and opens the hotkey
+   shortcut. Running it again is safe: it skips what's already done.
+2. Open a new Terminal window and run `jt --doctor`. Everything should say installed/running.
 
 ## Use it
 
