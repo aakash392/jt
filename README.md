@@ -17,7 +17,7 @@ read it once. For anything important, use `--check`.
    ```
    (The repo is private: ask Aakash to add your GitHub account first.)
    This downloads the model (about 7.2 GB, first time only) and adds a `jt` command.
-4. Open a new Terminal window and run `jt --doctor`. Everything should say installed/running.
+3. Open a new Terminal window and run `jt --doctor`. Everything should say installed/running.
 
 ## Use it
 
