@@ -130,6 +130,25 @@ that waits for a reload (~15–20 s). Lowering Docker Desktop's memory limit (Se
 If translations ever seem slow or stuck, `jt --doctor` shows your recent speeds ("Recent speed", from
 `~/.jt/timing.log`: every hotkey translation with its time and how much of the model was in memory). `ollama ps` shows whether it is loaded. Shutting down also frees it.
 
+## Using jt with Docker (developers)
+
+While loaded, the model needs about 7.6 GB that macOS can't move to disk, and Docker's VM takes as much memory as you
+allow it. If the two leave too little for macOS and your apps, the Mac swaps and translations take 10–50 s instead of
+a few seconds.
+
+**On a 16 GB Mac, give Docker 7 GB of memory at most** (Docker Desktop → Settings → Resources → Memory limit →
+Apply & restart). That leaves about 9 GB for the model, macOS and your apps; with more, translations become too slow
+to use. On a bigger Mac, keep the same rule: leave at least 9 GB outside Docker. (OrbStack / Colima: set their memory
+limit the same way, e.g. `colima start --memory 7`.)
+
+- Right after Docker starts or restarts your containers, translations are slow for 10–15 minutes (starting containers
+  keeps several CPU cores busy). It passes on its own.
+- The first translation after a slow spell can take ~20 s while Ollama brings its saved prompts back into memory.
+- A container that keeps the CPU busy slows translations for as long as it runs: `docker stats` shows which one.
+- `jt --doctor` shows recent speed and swap. Before a heavy build, `jt --stop` frees the model's memory;
+  `jt --keep-loaded 30m` frees it half an hour after your last translation. More than ~8 GB of swap only clears with a
+  restart.
+
 ## Found a bad translation?
 
 Send it to Aakash: the original message and what jt gave you. The fix goes into the shared glossary or examples,
