@@ -10,11 +10,12 @@ read it once. For anything important, use `--check`.
 ## Install (macOS, 16 GB RAM or more)
 
 1. Install Ollama from https://ollama.com/download and open it once.
-2. Put this `jt` folder somewhere permanent, e.g. `~/jt`.
-3. In Terminal:
+2. In Terminal, download jt into `~/jt` (the hotkey expects it there) and run the setup:
    ```bash
+   git clone https://github.com/aakash392/jt.git ~/jt
    bash ~/jt/install.sh
    ```
+   (The repo is private: ask Aakash to add your GitHub account first.)
    This downloads the model (about 7.2 GB, first time only) and adds a `jt` command.
 4. Open a new Terminal window and run `jt --doctor`. Everything should say installed/running.
 
@@ -142,10 +143,13 @@ Runs the known tricky messages in `tests.json` and reports PASS/FAIL. Run it aft
 editing the glossary or switching models, so you notice if something got worse.
 Add a test whenever you find a new kind of mistake.
 
-## Sharing updates across the team
+## Getting updates
 
-Keep this folder in a shared Git repo, so `git pull` gives everyone the latest
-glossary, examples and tests. Personal fixes (`corrections.jsonl`) stay on each Mac and are not committed,
+```bash
+cd ~/jt && git pull
+```
+
+This gives you the latest jt, glossary, examples and tests (no reinstall needed). Personal fixes (`corrections.jsonl`) stay on each Mac and are not committed,
 because they contain client messages.
 
 ## Other systems
