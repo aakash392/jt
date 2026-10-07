@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-jt - local Japanese <-> English translator for team chat (runs on Ollama).
+jt - local Japanese <-> English translator for any app on your Mac (runs on Ollama).
 
   jt "メッセージ"             translate text (direction is detected automatically)
   echo "text" | jt            translate from a pipe
@@ -113,7 +113,7 @@ Rules:
 GLOSSARY (Japanese = English):
 {glossary}"""
 
-PROJECT_HEADER = "PROJECT TERMS found in the next message (names used in our warehouse system; translate them exactly like this):\n"
+PROJECT_HEADER = "PROJECT TERMS found in the next message (names used in the system being discussed; translate them exactly like this):\n"
 
 STYLE = {
     "en": "- Write clear, natural business English.",
@@ -654,7 +654,7 @@ def translate(text, target=None, window=None, title=None):
     return "\n\n".join(outputs), src, tgt
 
 
-FIX_PROMPT = """You edit English messages for a technical work chat (a warehouse management system project with a Japanese client).
+FIX_PROMPT = """You edit English messages for a technical work chat between Japanese and English speakers.
 Correct grammar, spelling, punctuation and awkward or broken sentence structure, so the message reads as clear,
 natural business English.
 Rules:

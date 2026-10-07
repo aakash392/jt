@@ -1,8 +1,8 @@
-# Project terms from the app's ja.json (each row verified by hand; see project/ja-json-review.csv).
+# Project terms: screen names, statuses and field names (each verified by hand).
 # Format: Japanese = English. jt only sends the model the terms that appear in each message,
 # so this list can grow without slowing translations down. Edit freely.
 
-# --- Core WMS vocabulary (used consistently in all translations) ---
+# --- Core vocabulary (used consistently in all translations) ---
 入庫 = in-stock
 格納 = put-away
 出庫 = stock-out

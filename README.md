@@ -1,13 +1,15 @@
 # jt - local Japanese ⇄ English translator
 
-Translates team chat messages on your own Mac. Nothing is sent to the internet.
+Translates text between Japanese and English in any app on your Mac: chat, email, documents, the browser.
+Everything runs on your own Mac. Nothing is sent to the internet.
 It runs Google's `gemma4:12b-it-qat` model (Gemma 4 12B) through Ollama and uses a shared project glossary,
-so terms like 反映, ロボット and カラム come out the way our team uses them.
+so terms like 反映, ロボット and カラム always come out the same way.
 
 **It is a draft, not a final answer.** Before acting on a translation or sending one,
 read it once. For anything important, use `--check`.
 
 **User guide:** https://jt-guide.vercel.app/ (install, hotkey setup, every command, troubleshooting).
+**日本語のガイド：** https://jt-guide.vercel.app/?lang=ja
 
 ## Install (macOS, 16 GB RAM or more)
 
@@ -32,9 +34,9 @@ jt                                               # interactive: paste, then pres
 
 The direction is detected automatically. Use `--to en` or `--to ja` to force it.
 
-## Hotkey: translate inside Teams (the main way to use jt)
+## Hotkey: translate in any app (the main way to use jt)
 
-Works in Teams and any other app, with no browser and no Terminal. The jt folder must be at `~/jt`.
+Works in any app where you can copy text, with no browser and no Terminal. The jt folder must be at `~/jt`.
 Set it up once:
 
 1. In the **Shortcuts** app: **Shortcuts → Settings → Advanced → Allow Running Scripts** (on).
@@ -46,7 +48,7 @@ Set it up once:
 Without the file, make **Translate** by hand: **+** → action **Run Shell Script** →
 `/usr/bin/python3 "$HOME/jt/jt.py" --clipboard --show`.
 
-In Teams: select the message → **⌘C** → **⌃T**. A popup shows the result, and it's already copied, so **⌘V**
+In any app: select the text → **⌘C** → **⌃T**. A popup shows the result, and it's already copied, so **⌘V**
 pastes it. The result has both languages:
 
 ```
@@ -97,8 +99,8 @@ Changes take effect immediately, with no rebuild needed.
 
 ## Project terms (`project-glossary.txt`)
 
-About 300 terms from our app's `ja.json` (screen names, statuses, field names, carriers),
-each checked by hand, plus the core warehouse vocabulary we standardized on:
+About 300 terms (screen names, statuses, field names, carriers), each checked by hand,
+plus the core vocabulary that's always translated the same way:
 入荷 = arrival, 入庫 = in-stock, 格納 = put-away, 出荷 = shipping, 出庫 = stock-out,
 引当 = allocation, 荷主 = shipper, 棚卸 = stocktaking, 区分 = type, 移動 = movement.
 

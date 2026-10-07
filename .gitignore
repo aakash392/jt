@@ -1,7 +1,7 @@
 # Python
 __pycache__/
 
-# Old personal fixes (jt --correct, removed 7 Oct) contain client messages: never commit them
+# Old personal fixes (jt --correct, removed 7 Oct) contain private messages: never commit them
 corrections.jsonl
 corrections.jsonl.bak
 
@@ -9,7 +9,7 @@ corrections.jsonl.bak
 CLAUDE.md
 docs/
 dev/
-# The client's full ja.json review (all app text, company names); jt uses project-glossary.txt.
+# Local reference data, not needed to run jt (jt uses project-glossary.txt).
 project/
 
 # macOS / editor / Claude Code personal settings
