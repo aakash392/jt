@@ -8,7 +8,6 @@ jt - local Japanese <-> English translator for team chat (runs on Ollama).
   jt -c                       translate the clipboard and copy the result back
   jt -c --show                same, and show the translation in a popup (macOS)
   jt --check "text"           also translate the result back, to spot meaning drift
-  jt --correct                save a corrected translation (used as an example from then on)
   jt --selftest               run the regression tests in tests.json
   jt --doctor                 check that Ollama and the model are ready
   jt --warm / jt --stop       load the model and warm it up now / remove it from memory (frees ~7.6 GB)
@@ -16,7 +15,6 @@ jt - local Japanese <-> English translator for team chat (runs on Ollama).
   jt --format bilingual       what the hotkey copies: "English: …/Japanese: …" (default) or plain
   jt --keep-loaded 15m        how long the model stays in memory after a translation (default 8h)
   jt --clear-cache            forget the remembered hotkey translations (repeats come back instantly)
-  jt --export-training FILE   write saved corrections as fine-tuning data (JSONL)
 
 Settings (environment variables): JT_MODEL (default gemma4:12b-it-qat), OLLAMA_HOST.
 Standard library only; works with the Python 3.9 that ships with macOS.
@@ -24,7 +22,6 @@ Standard library only; works with the Python 3.9 that ships with macOS.
 
 import argparse
 import datetime
-import getpass
 import hashlib
 import json
 import os
@@ -44,7 +41,6 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 GLOSSARY_FILE = HERE / "glossary.txt"                  # core rules: always sent to the model
 PROJECT_FILE = HERE / "project-glossary.txt"           # app terms: only the ones found in the message
-CORRECTIONS_FILE = HERE / "corrections.jsonl"
 EXAMPLES_FILE = HERE / "examples.jsonl"                # built-in example translations (style teaching)
 TESTS_FILE = HERE / "tests.json"
 
@@ -54,7 +50,6 @@ if not HOST.startswith("http"):
     HOST = "http://" + HOST
 HOST = HOST.rstrip("/")
 
-MAX_EXAMPLES = 8  # how many saved corrections are shown to the model as examples
 MAX_TERMS = 25    # most project terms sent with one message (keeps the prompt small for a 9B model)
 
 # Settings Ollama loads the model with. They must be the same on EVERY request: a different value makes
@@ -81,8 +76,8 @@ KEEP_ALIVE = "8h"     # default: the model stays loaded 8 hours after the last u
                       # ~7.6 GB of RAM; `jt --keep-loaded 15m` frees it sooner (see keep_alive())
 LANG_NAME = {"en": "English", "ja": "Japanese"}
 
-# Per-user state, never shared: the last translation (so the hotkey can tell when the clipboard still holds it,
-# and `jt --correct` can fix it), the hotkey lock and the error log.
+# Per-user state, never shared: the last translation (so the hotkey can tell when the clipboard still holds it),
+# the hotkey lock, settings, logs and the cache.
 STATE_DIR = Path(os.environ.get("JT_STATE_DIR", str(Path.home() / ".jt")))
 LAST_FILE = STATE_DIR / "last.json"
 LOCK_FILE = STATE_DIR / "hotkey.lock"
@@ -231,10 +226,10 @@ def _file_text(path):
 
 def cache_key(text, target, fmt):
     """Everything that can change the hotkey's result: the message, forced direction, format, model and load settings,
-    the prompts, glossaries, examples and saved corrections. Change any of them and old entries simply stop matching."""
+    the prompts, glossaries and examples. Change any of them and old entries simply stop matching."""
     parts = [text, str(target), fmt, MODEL, json.dumps(LOAD_OPTIONS, sort_keys=True), RULES, json.dumps(STYLE),
              PROJECT_HEADER, FIX_PROMPT, json.dumps(FIX_EXAMPLES), str(SHORT_ENGLISH_WORDS)]
-    parts += [_file_text(f) for f in (GLOSSARY_FILE, PROJECT_FILE, EXAMPLES_FILE, CORRECTIONS_FILE)]
+    parts += [_file_text(f) for f in (GLOSSARY_FILE, PROJECT_FILE, EXAMPLES_FILE)]
     return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
 
 
@@ -283,13 +278,12 @@ def cache_summary():
         len(cache), size / 1024, CACHE_LIMIT)
 
 
-def save_last(source, translation, src, tgt, copied=None):
-    """`source`/`translation` are the pair that was translated (for `jt --correct`); `copied` is what went to the
-    clipboard (the bilingual block), so the hotkey can tell when it's still there."""
+def save_last(translation, copied=None):
+    """The last translation and what went to the clipboard (the bilingual block), so the hotkey can tell when the
+    clipboard still holds it (the user forgot ⌘C)."""
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
-        LAST_FILE.write_text(json.dumps({"source": source, "translation": translation, "source_lang": src,
-                                         "target_lang": tgt, "copied": copied or translation,
+        LAST_FILE.write_text(json.dumps({"translation": translation, "copied": copied or translation,
                                          "time": datetime.datetime.now().isoformat(timespec="minutes")},
                                         ensure_ascii=False), encoding="utf-8")
     except OSError:
@@ -339,7 +333,7 @@ def output_format():
 def load_last():
     try:
         last = json.loads(LAST_FILE.read_text(encoding="utf-8"))
-        return last if last.get("source") and last.get("translation") else None
+        return last if last.get("translation") else None
     except (OSError, ValueError, AttributeError):
         return None
 
@@ -422,19 +416,10 @@ def relevant_terms(text, src):
 
 def load_examples():
     """Built-in example translations shipped with jt (examples.jsonl)."""
-    return _read_pairs(EXAMPLES_FILE)
-
-
-def load_corrections():
-    """Fixes saved on this Mac with jt --correct (corrections.jsonl)."""
-    return _read_pairs(CORRECTIONS_FILE)
-
-
-def _read_pairs(path):
-    if not path.exists():
+    if not EXAMPLES_FILE.exists():
         return []
     items = []
-    for raw in path.read_text(encoding="utf-8").splitlines():
+    for raw in EXAMPLES_FILE.read_text(encoding="utf-8").splitlines():
         try:
             item = json.loads(raw)
             if item.get("source") and item.get("good"):
@@ -604,10 +589,7 @@ def _messages_for(text_for_terms, user_content, src, tgt):
     # Order matters for speed: everything up to the last example is the same for every message, so Ollama
     # reuses it; only the terms note and the message itself are new.
     messages = [{"role": "system", "content": build_system(tgt)}]
-    # Built-in examples first (they teach the style), then the team's own saved fixes.
-    seeds = [c for c in load_examples() if c.get("target_lang") == tgt]
-    fixes = [c for c in load_corrections() if c.get("target_lang") == tgt][-MAX_EXAMPLES:]
-    for ex in seeds + fixes:
+    for ex in (c for c in load_examples() if c.get("target_lang") == tgt):
         messages.append({"role": "user", "content": ex["source"]})
         messages.append({"role": "assistant", "content": ex["good"]})
     note = project_note(text_for_terms, src)
@@ -1117,12 +1099,11 @@ def more_input_waiting(timeout=0.15):
         return False
 
 
-def read_block(prompt, empty_cancels=False):
+def read_block(prompt):
     """Read a multi-line message from the terminal; an empty line typed by the user ends it.
 
     Blank lines inside a pasted message are kept: a paste arrives all at once, so after a blank line the
-    next line is already waiting, while a blank line the user types is followed by nothing.
-    With empty_cancels, an empty line typed before anything else returns None."""
+    next line is already waiting, while a blank line the user types is followed by nothing."""
     print(prompt, file=sys.stderr)
     lines = []
     while True:
@@ -1132,7 +1113,7 @@ def read_block(prompt, empty_cancels=False):
             break
         if not line.strip():
             if not more_input_waiting():
-                if lines or empty_cancels:
+                if lines:
                     break
             elif lines:
                 lines.append("")
@@ -1153,11 +1134,10 @@ def show_result(text, target, check):
             sys.stderr.write("\r" + " " * 14 + "\r")
             sys.stderr.flush()
     print(out)
-    save_last(text, out, src, tgt)
+    save_last(out)
     if check:
         back, _, _ = translate(out, src)
         print("\n[back-check -> %s]\n%s" % (LANG_NAME[src], back))
-    return out, src, tgt
 
 
 def mode_clipboard(target, show, check):
@@ -1184,7 +1164,7 @@ def mode_clipboard(target, show, check):
     hit = None if check else cache_get(key)  # a back-check always runs the model
     if hit:  # translated before with exactly the same glossary, prompts and model: same answer, instantly
         clipboard_set(hit["out"])
-        save_last(hit["translated_from"], hit["translation"], hit["src"], hit["tgt"], copied=hit["out"])
+        save_last(hit["translation"], copied=hit["out"])
         cache_touch(key)
         print(hit["out"])
         title = "jt: %s -> %s (%scopied, remembered from before)" % (
@@ -1202,7 +1182,7 @@ def mode_clipboard(target, show, check):
                 corrected = src == "en" and translated_from.strip() != text.strip()
             else:
                 translation, src, tgt = translate(text, target, window=window)
-                out, translated_from = translation, text
+                out = translation
             # Before anything is copied, so Cancel during the back-check still leaves everything as it was.
             back = translate(translation, src, window=window,
                              title="Checking the meaning (back to %s)" % LANG_NAME[src])[0] if (show and check) else None
@@ -1213,9 +1193,8 @@ def mode_clipboard(target, show, check):
                 if src == "en" and fmt == "bilingual" and needs_fixing(text):
                     used.add("fix")
                 warm_in_background(sorted(used))
-            save_last(translated_from, translation, src, tgt, copied=out)
-            cache_put(key, {"out": out, "src": src, "tgt": tgt, "translated_from": translated_from,
-                            "translation": translation, "corrected": corrected})
+            save_last(translation, copied=out)
+            cache_put(key, {"out": out, "src": src, "tgt": tgt, "translation": translation, "corrected": corrected})
     except JtCancelled:
         return  # the user cancelled: nothing copied, nothing more to show
     print(out)
@@ -1227,58 +1206,6 @@ def mode_clipboard(target, show, check):
         popup(body, title="jt: %s -> %s (%scopied)" % (LANG_NAME[src], LANG_NAME[tgt], note))
     else:
         notify(out, title="jt: %stranslation copied" % note)
-
-
-def mode_correct(target):
-    source = None
-    last = load_last()
-    if last and (target is None or target == last.get("target_lang")):
-        indent = lambda t: t.replace("\n", "\n               ")
-        print("Last translation (%s):\n  ORIGINAL   : %s\n  TRANSLATION: %s\n"
-              % (last.get("time", "").replace("T", " "), indent(last["source"]), indent(last["translation"])), file=sys.stderr)
-        try:
-            answer = input("Fix this one? [Y/n] (n = paste a different message) ")
-        except EOFError:
-            answer = "n"
-        if answer.strip().lower() in ("", "y", "yes"):
-            source, out, src, tgt = last["source"], last["translation"], last["source_lang"], last["target_lang"]
-    if source is None:
-        source = read_block("Paste the ORIGINAL message, then press Enter on an empty line:")
-        if not source:
-            return
-        out, src, tgt = translate(source, target)
-        print("\nCurrent translation:\n%s\n" % out, file=sys.stderr)
-    good = read_block("Type or paste the CORRECT %s translation, then an empty line (empty line alone = cancel):"
-                      % LANG_NAME[tgt], empty_cancels=True)
-    if not good:
-        print("Cancelled; nothing saved.", file=sys.stderr)
-        return
-    # Every saved fix is shown to the model as an example, so a wrong paste would hurt every later translation.
-    print("\nWill save:\n  ORIGINAL: %s\n  CORRECT : %s\n" % (source.replace("\n", "\n            "),
-                                                          good.replace("\n", "\n            ")), file=sys.stderr)
-    try:
-        answer = input("Save this fix? [y/N] ")
-    except EOFError:
-        answer = ""
-    if answer.strip().lower() not in ("y", "yes"):
-        print("Cancelled; nothing saved.", file=sys.stderr)
-        return
-    save_correction(source, src, tgt, out, good)
-    print("Saved to %s. It will be used as an example from now on." % CORRECTIONS_FILE.name, file=sys.stderr)
-
-
-def save_correction(source, src, tgt, bad, good):
-    entry = {
-        "date": datetime.date.today().isoformat(),
-        "by": getpass.getuser(),
-        "source_lang": src,
-        "target_lang": tgt,
-        "source": source,
-        "bad": bad,
-        "good": good,
-    }
-    with CORRECTIONS_FILE.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def check_output(test, out):
@@ -1339,7 +1266,6 @@ def mode_doctor():
         print("Model       : %s NOT installed - run: ollama pull %s" % (MODEL, MODEL))
     print("Glossary    : %d terms (%s)" % (len(load_glossary()), GLOSSARY_FILE.name))
     print("Project     : %d terms (%s, only matching ones are sent)" % (len(load_project_terms()), PROJECT_FILE.name))
-    print("Corrections : %d saved (%s)" % (len(load_corrections()), CORRECTIONS_FILE.name))
     print("Format      : %s (change with: jt --format bilingual|plain)" % output_format())
     print("Keep loaded : %s after the last translation (~7.6 GB while loaded; change with: jt --keep-loaded 15m)" % keep_alive())
     print("Recent speed: %s" % (timing_summary() or "no hotkey translations logged yet"))
@@ -1451,22 +1377,6 @@ def mode_stop():
         print("The model wasn't loaded, so there was nothing to free.")
 
 
-def mode_export(path):
-    items = load_corrections()
-    if not items:
-        die("no saved corrections yet. Use `jt --correct` to add some.")
-    with open(path, "w", encoding="utf-8") as f:
-        for c in items:
-            msgs = [{"role": "system", "content": build_system(c["target_lang"])}]
-            note = project_note(c["source"], c.get("source_lang"))
-            if note:
-                msgs.append({"role": "system", "content": note})
-            msgs += [{"role": "user", "content": c["source"]}, {"role": "assistant", "content": c["good"]}]
-            row = {"messages": msgs}
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    print("Wrote %d training examples to %s" % (len(items), path))
-
-
 # ---------------------------------------------------------------- main
 
 def main():
@@ -1494,12 +1404,10 @@ def _main():
     p.add_argument("--show", action="store_true", help="with -c: show the translation in a popup (macOS)")
     p.add_argument("--check", action="store_true", help="also translate the result back to spot meaning drift")
     p.add_argument("--to", choices=["en", "ja"], help="force the target language")
-    p.add_argument("--correct", action="store_true", help="save a corrected translation")
     p.add_argument("--selftest", action="store_true", help="run the regression tests in tests.json")
     p.add_argument("--doctor", action="store_true", help="check Ollama and the model")
     p.add_argument("--warm", action="store_true", help="load the model now so the next translation is fast")
     p.add_argument("--stop", action="store_true", help="remove the model from memory now (frees ~7.6 GB of RAM)")
-    p.add_argument("--export-training", metavar="FILE", help="export corrections as fine-tuning data (JSONL)")
     p.add_argument("--warm-prompts", nargs="*", metavar="SKIP", help=argparse.SUPPRESS)  # internal: see warm_in_background
     p.add_argument("--clear-cache", action="store_true", help="forget the remembered hotkey translations")
     p.add_argument("--keep-loaded", metavar="TIME",
@@ -1545,10 +1453,6 @@ def _main():
         return mode_stop()
     if args.selftest:
         return mode_selftest()
-    if args.export_training:
-        return mode_export(args.export_training)
-    if args.correct:
-        return mode_correct(args.to)
     if args.clipboard:
         return mode_clipboard(args.to, args.show, args.check)
 

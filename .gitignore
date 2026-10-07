@@ -1,7 +1,7 @@
 # Python
 __pycache__/
 
-# Personal, per Mac: saved fixes contain client messages (local only, user's decision 5 Oct)
+# Old personal fixes (jt --correct, removed 7 Oct) contain client messages: never commit them
 corrections.jsonl
 corrections.jsonl.bak
 

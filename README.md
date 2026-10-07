@@ -126,16 +126,10 @@ that waits for a reload (~15–20 s). Lowering Docker Desktop's memory limit (Se
 If translations ever seem slow or stuck, `jt --doctor` shows your recent speeds ("Recent speed", from
 `~/.jt/timing.log`: every hotkey translation with its time and how much of the model was in memory). `ollama ps` shows whether it is loaded. Shutting down also frees it.
 
-## Fixing a bad translation (`jt --correct`)
+## Found a bad translation?
 
-`jt --correct` first offers the **last translation you made** (with the hotkey or `jt`): press Enter to fix that one,
-or `n` to paste a different message. Then paste the correct translation, check what jt shows, and answer `y`.
-It's saved to `corrections.jsonl` **on your Mac only** (it contains client messages, so it's never committed).
-The 8 most recent fixes are shown to the model as examples from then on. A wrong paste here would hurt every
-later translation, so check before saving. Saved fixes are also possible fine-tuning data later.
-
-**A fix the whole team needs** (a term, or a mistake that keeps coming back) belongs in a shared file instead:
-a term in `project-glossary.txt` / `glossary.txt`, or an example pair in `examples.jsonl`. Then run `jt --selftest`.
+Send it to Aakash: the original message and what jt gave you. The fix goes into the shared glossary or examples,
+is checked against the self-tests so nothing else gets worse, and reaches everyone with `git pull`.
 
 ## Before changing the model or glossary: `jt --selftest`
 
@@ -149,8 +143,7 @@ Add a test whenever you find a new kind of mistake.
 cd ~/jt && git pull
 ```
 
-This gives you the latest jt, glossary, examples and tests (no reinstall needed). Personal fixes (`corrections.jsonl`) stay on each Mac and are not committed,
-because they contain client messages.
+This gives you the latest jt, glossary, examples and tests (no reinstall needed).
 
 ## Other systems
 
