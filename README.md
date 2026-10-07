@@ -19,7 +19,6 @@ read it once. For anything important, use `--check`.
    git clone https://github.com/aakash392/jt.git ~/jt
    bash ~/jt/install.sh
    ```
-   (The repo is private: ask Aakash to add your GitHub account first.)
    This downloads the model (about 7.2 GB, first time only) and adds a `jt` command.
 3. Open a new Terminal window and run `jt --doctor`. Everything should say installed/running.
 
