@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# One-time setup for jt on macOS (also works on Linux): installs Ollama if it's missing, starts it, downloads the
-# model, adds the `jt` command and opens the hotkey shortcut. Safe to run again: it skips what's already done.
+# One-time setup for jt on macOS (also works on Linux): installs Ollama if it's missing (Homebrew's service when
+# Homebrew is there, otherwise the official app), gives it jt's memory settings, starts it, downloads the model, adds
+# the `jt` command and opens the hotkey shortcut. Safe to run again: it skips what's already done.
 set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -9,6 +10,11 @@ HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 case "$HOST" in http*) ;; *) HOST="http://$HOST" ;; esac
 OLLAMA_APP_URL="https://ollama.com/download/Ollama-darwin.zip"  # Ollama's official, signed Mac app
 APPS_DIR="${JT_APPS_DIR:-/Applications}"                         # where the app goes (~/Applications if not writable)
+# The settings Homebrew's Ollama service runs with, and every jt test ran with: flash attention and an 8-bit
+# compressed KV cache. Same speed and accuracy as Ollama's defaults, about 2 GB less memory (measured 7 Oct 2026).
+SETTINGS_AGENT="$HOME/Library/LaunchAgents/com.jt.ollama-settings.plist"
+SETTINGS_HINT="OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0 ollama serve"
+BREW="$(command -v brew || true)"
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 not found. On macOS run:  xcode-select --install   then run this script again."
@@ -32,8 +38,39 @@ find_ollama() {
   return 1
 }
 
+brew_ollama() { [ -n "$BREW" ] && "$BREW" list --formula ollama >/dev/null 2>&1; }
+
+# The Ollama app reads its settings from launchd. A small login item sets them at every login and restarts the app
+# if it was already running without them; loading it now applies them straight away.
+app_settings() {
+  local app="$1"
+  mkdir -p "$(dirname "$SETTINGS_AGENT")"
+  cat > "$SETTINGS_AGENT" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jt.ollama-settings</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>launchctl setenv OLLAMA_FLASH_ATTENTION 1; launchctl setenv OLLAMA_KV_CACHE_TYPE q8_0; if pgrep -xq Ollama; then osascript -e 'quit app "Ollama"'; sleep 3; open -g -a "$app"; fi</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
+EOF
+  launchctl bootout "gui/$(id -u)" "$SETTINGS_AGENT" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$SETTINGS_AGENT"
+  echo "Gave the Ollama app jt's memory settings (login item: $SETTINGS_AGENT)."
+}
+
 install_ollama() {
-  if [ "$(uname)" = "Darwin" ]; then
+  if [ "$(uname)" = "Darwin" ] && [ -n "$BREW" ]; then
+    echo "Installing Ollama with Homebrew..."
+    "$BREW" install ollama
+  elif [ "$(uname)" = "Darwin" ]; then
     echo "Installing Ollama (the official Mac app from ollama.com, about 200 MB)..."
     local tmp dest
     tmp="$(mktemp -d)"
@@ -51,16 +88,15 @@ install_ollama() {
   fi
 }
 
-start_ollama() {
+start_ollama() {  # starts the Ollama chosen below ($KIND: app, brew or other) and waits until it answers
   if ollama_up; then return 0; fi
   echo "Starting Ollama..."
-  local app
-  if app="$(find_app)"; then
-    open -g -a "$app"  # in the background; its window can be closed, it keeps running in the menu bar
-  else
-    mkdir -p "$HOME/.jt"
-    nohup "$OLLAMA" serve >>"$HOME/.jt/ollama.log" 2>&1 &
-  fi
+  case "$KIND" in
+    app)  open -g -a "$APP" ;;  # in the background; its window can be closed, it keeps running in the menu bar
+    brew) ;;                    # Homebrew's service was just started: only wait for it
+    *)    mkdir -p "$HOME/.jt"
+          OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0 nohup "$OLLAMA" serve >>"$HOME/.jt/ollama.log" 2>&1 & ;;
+  esac
   for _ in $(seq 1 60); do
     if ollama_up; then return 0; fi
     sleep 1
@@ -73,6 +109,25 @@ case "$HOST" in
     if ! OLLAMA="$(find_ollama)"; then
       install_ollama
       OLLAMA="$(find_ollama)" || { echo "Ollama didn't install. Get it from https://ollama.com/download, then run this again."; exit 1; }
+    fi
+    KIND=other
+    if [ "$(uname)" = "Darwin" ]; then
+      # Exactly one Ollama, with jt's settings: the app if it's in use or installed, else Homebrew's service
+      # (which has the settings built in). Never both: they would fight over the same port.
+      if APP="$(find_app)" && { pgrep -xq Ollama || ! brew_ollama; }; then
+        app_settings "$APP"
+        KIND=app
+      elif brew_ollama; then
+        "$BREW" services start ollama >/dev/null
+        KIND=brew
+        echo "Ollama runs as Homebrew's background service (it has jt's memory settings built in)."
+      else
+        echo "Note: this Ollama isn't the app or Homebrew's, so jt can't give it its memory settings."
+        echo "      When jt starts it, it passes them itself; to set them always: $SETTINGS_HINT"
+      fi
+    else
+      echo "Tip: for about 2 GB less memory, run Ollama with OLLAMA_FLASH_ATTENTION=1 and OLLAMA_KV_CACHE_TYPE=q8_0"
+      echo "     (sudo systemctl edit ollama, then add those two lines under [Service] as Environment=...)."
     fi
     if ! start_ollama; then
       echo "Ollama is installed but didn't start. Open the Ollama app (or run: ollama serve), then run this again."

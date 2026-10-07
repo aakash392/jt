@@ -474,6 +474,11 @@ OLLAMA_COMMANDS = ("/opt/homebrew/bin/ollama", "/usr/local/bin/ollama") + tuple(
     str(a / "Contents" / "Resources" / "ollama") for a in OLLAMA_APPS)
 
 
+# Ollama settings every jt measurement ran with (Homebrew's Ollama service sets them; install.sh gives them to the
+# app): flash attention and an 8-bit KV cache. Same speed and accuracy, ~2 GB less memory than Ollama's defaults.
+OLLAMA_SETTINGS = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0"}
+
+
 def ollama_command():
     """The `ollama` command on this Mac, or None."""
     for path in [shutil.which("ollama")] + list(OLLAMA_COMMANDS):
@@ -550,8 +555,10 @@ def start_ollama(wait=20):
             subprocess.run(["open", "-g", "-a", str(app)], capture_output=True)
         elif cli:
             STATE_DIR.mkdir(parents=True, exist_ok=True)
+            env = dict(OLLAMA_SETTINGS, **os.environ)  # the user's own values win
             with open(str(STATE_DIR / "ollama.log"), "ab") as out:
-                subprocess.Popen([cli, "serve"], stdout=out, stderr=out, stdin=subprocess.DEVNULL, start_new_session=True)
+                subprocess.Popen([cli, "serve"], stdout=out, stderr=out, stdin=subprocess.DEVNULL, start_new_session=True,
+                                 env=env)
         else:
             return False
     except OSError:
@@ -1370,6 +1377,7 @@ def mode_doctor():
         print("Hotkey      : %s" % hotkey_status())
         print("Progress    : %s (change with: jt --progress corner|center|off)" % progress_mode())
         print("Memory      : %s" % memory_status())
+        print("Ollama setup: %s" % ollama_settings_status())
     sys.exit(0 if wanted in names else 1)
 
 
@@ -1395,6 +1403,21 @@ def hotkey_status():
     if problems:
         return "; ".join(problems)
     return "shortcuts found: " + ", ".join('"%s"' % s for s in found)
+
+
+def ollama_settings_status():
+    """Whether Ollama runs the model with jt's memory settings, read from its model server's command line."""
+    try:
+        args = subprocess.run(["ps", "-axo", "args"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    servers = [l for l in args.splitlines() if "llama-server" in l or "ollama runner" in l]
+    if not servers:
+        return "can't tell until the model is loaded (run: jt --warm)"
+    if any("--cache-type-k q8_0" in l for l in servers):
+        return "OK (compressed memory: 8-bit KV cache with flash attention)"
+    return ("OFF: the model uses ~2 GB more memory than it needs. Run  bash ~/jt/install.sh  again "
+            "(or start Ollama with OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0)")
 
 
 def memory_status():

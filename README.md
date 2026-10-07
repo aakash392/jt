@@ -18,9 +18,11 @@ read it once. For anything important, use `--check`.
    git clone https://github.com/aakash392/jt.git ~/jt
    bash ~/jt/install.sh
    ```
-   The setup does everything: it installs Ollama if you don't have it (the official Mac app from ollama.com, about
-   200 MB), starts it, downloads the model (about 7.2 GB, first time only), adds a `jt` command and opens the hotkey
-   shortcut. Running it again is safe: it skips what's already done.
+   The setup does everything: it installs Ollama if you don't have it (with Homebrew if you use it, otherwise the
+   official Mac app from ollama.com, about 200 MB), gives Ollama jt's memory settings (flash attention and an 8-bit KV
+   cache: about 2 GB less memory, same speed and accuracy), starts it, downloads the model (about 7.2 GB, first time
+   only), adds a `jt` command and opens the hotkey shortcut. Running it again is safe: it skips what's already done.
+   Already set up before 7 Oct 2026? Run it again to get the memory settings; `jt --doctor` shows "Ollama setup: OK".
 2. Open a new Terminal window and run `jt --doctor`. Everything should say installed/running.
 
 ## Use it
