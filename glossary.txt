@@ -1,0 +1,14 @@
+# Shared project glossary for jt.
+# Format: Japanese = English   (one term per line; lines starting with # are ignored)
+# Applied in both directions. Add a term whenever a translation gets it wrong.
+# Keep it focused (roughly 50-100 terms); a small model starts ignoring very long lists.
+
+ロボット = RPA robot (English text: "RPA robot"; Japanese text: ロボット)
+DB = database
+カラム = column
+注文 = order
+反映 = apply / push (to an environment), never "reflect"
+確認をお願いします = please check / please review
+本番環境 = production environment
+テスト環境 = test environment
+お疲れ様です = Hi, (a greeting; never translate it as "thank you for your hard work")

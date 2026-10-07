@@ -1,0 +1,167 @@
+# jt - local Japanese ⇄ English translator
+
+Translates team chat messages on your own Mac. Nothing is sent to the internet.
+It runs Google's `gemma4:12b-it-qat` model (Gemma 4 12B) through Ollama and uses a shared project glossary,
+so terms like 反映, ロボット and カラム come out the way our team uses them.
+
+**It is a draft, not a final answer.** Before acting on a translation or sending one,
+read it once. For anything important, use `--check`.
+
+## Install (macOS, 16 GB RAM or more)
+
+1. Install Ollama from https://ollama.com/download and open it once.
+2. Put this `jt` folder somewhere permanent, e.g. `~/jt`.
+3. In Terminal:
+   ```bash
+   bash ~/jt/install.sh
+   ```
+   This downloads the model (about 7.2 GB, first time only) and adds a `jt` command.
+4. Open a new Terminal window and run `jt --doctor`. Everything should say installed/running.
+
+## Use it
+
+```bash
+jt "在庫が0の場合でも変更しないでください。"     # Japanese → English
+jt "Please don't deploy until it's tested."      # English → Japanese
+jt --check "..."                                 # also translates back, to catch meaning drift
+jt                                               # interactive: paste, then press Enter on an empty line
+```
+
+The direction is detected automatically. Use `--to en` or `--to ja` to force it.
+
+## Hotkey: translate inside Teams (the main way to use jt)
+
+Works in Teams and any other app, with no browser and no Terminal. The jt folder must be at `~/jt`.
+Set it up once:
+
+1. In the **Shortcuts** app: **Shortcuts → Settings → Advanced → Allow Running Scripts** (on).
+2. Add the ready-made shortcut: `install.sh` opens it, or double-click `~/jt/hotkey/Translate.shortcut`,
+   and click **Add Shortcut**.
+3. Give it its key: select **Translate** → **ⓘ** (details) → **Add Keyboard Shortcut** → press **⌃T** (Control+T).
+   `jt --doctor` checks that the shortcut is there.
+
+Without the file, make **Translate** by hand: **+** → action **Run Shell Script** →
+`/usr/bin/python3 "$HOME/jt/jt.py" --clipboard --show`.
+
+In Teams: select the message → **⌘C** → **⌃T**. A popup shows the result, and it's already copied, so **⌘V**
+pastes it. The result has both languages:
+
+```
+English: Could you check if the arrival CSV import works now?
+Japanese: 入荷CSVのインポートが現在動作するかご確認いただけますでしょうか。
+```
+
+- **Replying:** write your reply in English, copy it, press ⌃T. jt first **corrects your English** (grammar,
+  spelling, sentence structure; never the meaning, names, numbers, IDs or code), then translates the corrected
+  English. You paste both lines. The popup title says "English corrected" when something was changed.
+- **Reading:** a Japanese message gives the English translation, with the original Japanese below it.
+- Multi-line messages put each label on its own line, with a blank line between the two parts.
+- Prefer the old way (only the translation, no correcting)? `jt --format plain`; back with `jt --format bilingual`.
+
+
+Line breaks and blank lines are kept, so multi-point messages stay readable.
+
+A message you've translated before comes back **instantly** (jt remembers its last 500 results, about 1 MB, in
+`~/.jt/`; the popup says "remembered from before"). It's forgotten automatically when the glossary, examples or model
+change; `jt --clear-cache` empties it. Very short English ("Thanks!", "Got it") skips the correction step.
+
+While it works, a small panel in the **top-right corner** shows a **progress bar**, **"about N seconds left"**,
+and the translation **appearing as it's written**. It never takes the focus, so you can keep typing.
+**Hide** puts it away for this translation (the result still pops up at the end); **Cancel** stops it and leaves
+your clipboard as it was. The time left is an estimate from the message's length and Gemma's measured speed, so it
+can be off by a few seconds.
+
+Prefer it elsewhere? `jt --progress center` (middle of the screen), `jt --progress off` (no panel, just a short
+notification), `jt --progress corner` (back to the default). It's saved for you only.
+
+The hotkey looks after you:
+- **Forgot ⌘C?** If the clipboard still holds jt's last translation, it tells you instead of translating it back.
+- **Nothing to translate** (only a link, numbers or code): it says so.
+- **Pressed twice?** The second press tells you the first is still translating; nothing runs twice.
+- **Copied something huge** (over ~2,000 characters)? It asks before starting a long translation.
+- **Ollama not running?** It starts it and carries on (allow ~20 seconds).
+- **Something went wrong?** You always get a popup. Unexpected problems are logged in `~/.jt/jt.log`.
+
+The first run asks for permission; allow it. If you want the back-check in the popup
+too, add `--check` to the command (slower).
+
+## Shared glossary (`glossary.txt`)
+
+One term per line, `Japanese = English`. It applies in both directions.
+When a translation gets a project term wrong, add it here. Keep the list focused
+(roughly 50–100 terms); a small model starts ignoring very long lists.
+Changes take effect immediately, with no rebuild needed.
+
+## Project terms (`project-glossary.txt`)
+
+About 300 terms from our app's `ja.json` (screen names, statuses, field names, carriers),
+each checked by hand, plus the core warehouse vocabulary we standardized on:
+入荷 = arrival, 入庫 = in-stock, 格納 = put-away, 出荷 = shipping, 出庫 = stock-out,
+引当 = allocation, 荷主 = shipper, 棚卸 = stocktaking, 区分 = type, 移動 = movement.
+
+jt sends the model **only the terms that appear in the message** (up to 25, longest first),
+so the list can grow to thousands without slowing down or confusing the model. It works in
+both directions: English messages are matched on the English side.
+
+- Add or fix a term: edit the file (`Japanese = English`). Changes apply on the next translation.
+
+## Free up memory when you need it
+
+While loaded, the model holds about 7.6 GB of RAM (for 8 hours after the last use). Before something
+memory-heavy (Docker, large builds, screen-sharing in a big call), remove it from memory:
+
+```bash
+jt --stop                 # or: ollama stop gemma4:12b-it-qat
+```
+
+Nothing breaks: the next translation loads it again
+automatically (about 15–20 seconds).
+
+While loaded, the model's memory is **pinned** (macOS can't swap it out), so with Docker running everything else gets
+less room. To free it automatically a while after your last translation, instead of after 8 hours:
+`jt --keep-loaded 15m` (or `30m`, `1h`; back with `jt --keep-loaded 8h`). The trade-off: the first translation after
+that waits for a reload (~15–20 s). Lowering Docker Desktop's memory limit (Settings → Resources) helps too.
+
+If translations ever seem slow or stuck, `jt --doctor` shows your recent speeds ("Recent speed", from
+`~/.jt/timing.log`: every hotkey translation with its time and how much of the model was in memory). `ollama ps` shows whether it is loaded. Shutting down also frees it.
+
+## Fixing a bad translation (`jt --correct`)
+
+`jt --correct` first offers the **last translation you made** (with the hotkey or `jt`): press Enter to fix that one,
+or `n` to paste a different message. Then paste the correct translation, check what jt shows, and answer `y`.
+It's saved to `corrections.jsonl` **on your Mac only** (it contains client messages, so it's never committed).
+The 8 most recent fixes are shown to the model as examples from then on. A wrong paste here would hurt every
+later translation, so check before saving. Saved fixes are also possible fine-tuning data later.
+
+**A fix the whole team needs** (a term, or a mistake that keeps coming back) belongs in a shared file instead:
+a term in `project-glossary.txt` / `glossary.txt`, or an example pair in `examples.jsonl`. Then run `jt --selftest`.
+
+## Before changing the model or glossary: `jt --selftest`
+
+Runs the known tricky messages in `tests.json` and reports PASS/FAIL. Run it after
+editing the glossary or switching models, so you notice if something got worse.
+Add a test whenever you find a new kind of mistake.
+
+## Sharing updates across the team
+
+Keep this folder in a shared Git repo, so `git pull` gives everyone the latest
+glossary, examples and tests. Personal fixes (`corrections.jsonl`) stay on each Mac and are not committed,
+because they contain client messages.
+
+## Other systems
+
+- **Windows/Linux:** install Ollama, run `ollama pull gemma4:12b-it-qat`, then `python jt.py ...`.
+  The clipboard mode works too: it uses PowerShell on Windows and needs `xclip` or
+  `wl-clipboard` on Linux. The popup is macOS-only; elsewhere the translation is printed.
+- **Different model:** `JT_MODEL=qwen3.5:9b jt "..."` (the previous default: a bit faster, 1.7 GB less RAM,
+  less accurate). Run `jt --selftest` to compare.
+
+## Troubleshooting
+
+| Message | Fix |
+|---|---|
+| can't reach Ollama | jt tries to start it; if that fails, open the Ollama app (menu bar icon) |
+| Translations are sometimes slow (10–20 s) | `jt --doctor` shows swap in use. The Mac is short on memory and the model was swapped out: close apps or lower Docker's memory limit |
+| model isn't installed | `ollama pull gemma4:12b-it-qat` |
+| Japanese shows as garbage in the hotkey | Make sure the command uses `/usr/bin/python3` and the `jt.py` from this folder |
+| Slow first translation | Normal: the model loads into memory (a few seconds), then it stays ready for 8 hours after the last use (about 7.6 GB of RAM while loaded; freed after 8 idle hours or at shutdown). Run `jt --warm` to load it ahead of time. Memory tight? `jt --keep-loaded 30m` |

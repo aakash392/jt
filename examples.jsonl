@@ -1,0 +1,9 @@
+{"source_lang": "ja", "target_lang": "en", "source": "お手数ですが、テスト環境のURLとログイン情報を教えていただけますでしょうか。", "good": "Sorry for the trouble, but could you please tell us the URL and login details for the test environment?"}
+{"source_lang": "ja", "target_lang": "en", "source": "こちらの画面で一度再インポートしていただき、エラーが出るかどうかご確認いただけますでしょうか。", "good": "Could you please try re-importing once on this screen and check whether an error appears?"}
+{"source_lang": "ja", "target_lang": "en", "source": "どのバッチ種類を使うべきか、また何件で区切ればよいかを教えていただけますか。", "good": "Could you tell us which batch type we should use, and how many orders each batch should have?"}
+{"source_lang": "en", "target_lang": "ja", "source": "Could you confirm whether the order date field is required, and if so, which format we should use?", "good": "注文日の項目が必須かどうか、また必須の場合はどの形式を使用すればよいか、ご確認いただけますでしょうか。"}
+{"source_lang": "en", "target_lang": "ja", "source": "Could you tell us when the next release is planned?", "good": "次回のリリース予定日を教えていただけますでしょうか。"}
+{"source_lang": "en", "target_lang": "ja", "source": "Could you try it once on your side and let us know whether it works?", "good": "一度そちらでお試しいただき、正常に動作するかどうか教えていただけますでしょうか。"}
+{"source_lang": "ja", "target_lang": "en", "source": "一度、テスト用の荷主で出荷指示を登録して、送り状が正しく印刷されるかご確認いただけますでしょうか。", "good": "Could you please try registering a shipping instruction once with a test shipper, and check whether the shipping label prints correctly?"}
+{"source_lang": "ja", "target_lang": "en", "source": "お疲れ様です。\n出荷指示のCSVを再アップロードしました。\n\n何件取り込まれたか、ご確認いただけますでしょうか。", "good": "Hi,\nI have re-uploaded the shipping instruction CSV.\n\nCould you please check how many records were imported?"}
+{"source_lang": "en", "target_lang": "ja", "source": "Could you send us the log from your environment? We'll compare it with the log from ours.", "good": "そちらの環境のログを送っていただけますでしょうか。こちらの環境のログと比較します。"}

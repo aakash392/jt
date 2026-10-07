@@ -1,0 +1,610 @@
+[
+  {
+    "id": "db-column",
+    "checks": "keeps 'which', no invented terms",
+    "source": "もう一点の懸念として、この情報をどのDBカラムに保存する必要があるか確認したいです。\nまた、これらの項目に対応するロボットのカラムマッピングも追加する必要がある可能性があります。\n保存先のDBカラムと、ロボットマッピングの追加が必要かどうかをご確認いただけますでしょうか。",
+    "must": [
+      [
+        "which"
+      ],
+      [
+        "add"
+      ]
+    ],
+    "must_not": [
+      "robotic system",
+      "ma'am",
+      "update the"
+    ]
+  },
+  {
+    "id": "csv-columns",
+    "checks": "no invented address, keeps 'try'",
+    "source": "これらのカラムがこちらのCSVに表示されていないため、何か問題がある可能性があります。\n一度、1件の注文にこれらのカラムを追加して、値が正しく含まれるかご確認いただけますでしょうか。",
+    "must": [
+      [
+        "try"
+      ],
+      [
+        "may",
+        "might",
+        "could"
+      ]
+    ],
+    "must_not": [
+      "ma'am",
+      "sir"
+    ]
+  },
+  {
+    "id": "negation",
+    "checks": "keeps 'do not' and 'even if'",
+    "source": "在庫が0の場合でも、注文ステータスを「キャンセル」に変更しないでください。",
+    "must": [
+      [
+        "not",
+        "n't"
+      ],
+      [
+        "even if",
+        "even when"
+      ]
+    ],
+    "must_not": []
+  },
+  {
+    "id": "two-questions",
+    "checks": "both asks stay information requests, and it stays a request",
+    "source": "どのAPIエンドポイントを使用すべきか、また認証トークンの有効期限が何日かを教えていただけますか。",
+    "must": [
+      [
+        "which"
+      ],
+      [
+        "how many days",
+        "how long",
+        "in days",
+        "validity period"
+      ],
+      [
+        "could you",
+        "can you",
+        "please tell",
+        "would you"
+      ]
+    ],
+    "must_not": []
+  },
+  {
+    "id": "hanei",
+    "checks": "反映 is 'apply/push', not 'reflect'",
+    "source": "テスト環境のデータを誤って本番環境に反映してしまいました。申し訳ございません。",
+    "must": [
+      [
+        "appl",
+        "push",
+        "deploy"
+      ]
+    ],
+    "must_not": [
+      "reflect"
+    ]
+  },
+  {
+    "id": "limit",
+    "checks": "keeps the number",
+    "source": "1回の処理で最大500件まで登録可能ですが、それ以上の場合は分割してアップロードする必要があります。",
+    "must": [
+      [
+        "500"
+      ],
+      [
+        "split",
+        "batch",
+        "divid"
+      ]
+    ],
+    "must_not": []
+  },
+  {
+    "id": "en-until",
+    "checks": "EN->JA keeps 'until' + negation",
+    "source": "Please don't deploy until the robot mapping has been tested.",
+    "must": [
+      [
+        "まで"
+      ],
+      [
+        "ないで",
+        "しないで",
+        "控え"
+      ],
+      [
+        "ロボット"
+      ]
+    ],
+    "must_not": []
+  },
+  {
+    "id": "en-whether",
+    "checks": "EN->JA keeps the yes/no question, 'if so, what', and the request; uses 送付先住所",
+    "source": "Could you confirm whether the shipping address field is mandatory, and if so, what the maximum length is?",
+    "must": [
+      [
+        "かどうか",
+        "必須でしょうか",
+        "必須ですか"
+      ],
+      [
+        "最大"
+      ],
+      [
+        "確認",
+        "教えて"
+      ]
+    ],
+    "must_not": [
+      "出荷住所"
+    ]
+  },
+  {
+    "id": "project-term-ja",
+    "checks": "uses the app's screen name for 入荷検品表 (arrival, not receiving)",
+    "source": "入荷検品表を印刷してから、引当解除してください。",
+    "must": [
+      [
+        "arrival inspection sheet"
+      ],
+      [
+        "deallocat"
+      ]
+    ],
+    "must_not": [
+      "reflect",
+      "receiving"
+    ]
+  },
+  {
+    "id": "project-term-en",
+    "checks": "EN->JA uses the app's Japanese screen names",
+    "source": "Please print the arrival inspection sheet and check the allocatable quantity.",
+    "must": [
+      [
+        "入荷検品表"
+      ],
+      [
+        "引当可能数"
+      ]
+    ],
+    "must_not": []
+  },
+  {
+    "id": "china-not-chugoku",
+    "checks": "中国 in normal text stays 'China'",
+    "source": "中国のサプライヤーから来週入荷予定です。",
+    "must": [
+      [
+        "china",
+        "chinese"
+      ]
+    ],
+    "must_not": [
+      "chugoku"
+    ]
+  },
+  {
+    "id": "hidden-subject",
+    "checks": "the writer uploads, the reader checks",
+    "source": "明日までに修正版をアップロードしておきますので、確認をお願いします。",
+    "must": [
+      [
+        "i'll",
+        "i will",
+        "we'll",
+        "we will"
+      ],
+      [
+        "review",
+        "check"
+      ]
+    ],
+    "must_not": [
+      "please upload",
+      "could you upload"
+    ]
+  },
+  {
+    "id": "hedging",
+    "checks": "keeps 'probably / I think' and 'not certain yet'",
+    "source": "原因はおそらくタイムゾーンの設定だと思いますが、まだ断定はできません。",
+    "must": [
+      [
+        "probably",
+        "likely",
+        "i think",
+        "we think"
+      ],
+      [
+        "not sure",
+        "can't say",
+        "cannot say",
+        "not certain",
+        "can't be certain",
+        "cannot be certain",
+        "definitively",
+        "for certain",
+        "can't confirm",
+        "cannot confirm",
+        "cannot be determined",
+        "can't be determined",
+        "cannot determine",
+        "can't determine"
+      ]
+    ],
+    "must_not": []
+  },
+  {
+    "id": "indirect-no",
+    "checks": "the polite refusal stays a refusal",
+    "source": "その仕様変更については、今回のリリースでは対応が難しいかと思います。",
+    "must": [
+      [
+        "difficult",
+        "hard",
+        "unlikely",
+        "not be able",
+        "won't be able",
+        "cannot",
+        "can't"
+      ],
+      [
+        "this release"
+      ]
+    ],
+    "must_not": [
+      "will be included",
+      "we will support"
+    ]
+  },
+  {
+    "id": "yes-no-robot",
+    "checks": "stays a yes/no question; ロボット = RPA robot",
+    "source": "ロボットが夜間バッチで停止した場合、手動で再実行する必要はありますか。",
+    "must": [
+      [
+        "do we need",
+        "do i need",
+        "is it necessary",
+        "should we",
+        "do we have to",
+        "will we need",
+        "would we need",
+        "is there a need"
+      ],
+      [
+        "manual"
+      ],
+      [
+        "rpa",
+        "robot"
+      ]
+    ],
+    "must_not": []
+  },
+  {
+    "id": "en-hedging",
+    "checks": "EN->JA keeps 'our side', 'likely' and 'not 100% sure'",
+    "source": "We haven't changed anything on our side, so the issue is likely on the API side, but we're not 100% sure.",
+    "must": [
+      [
+        "こちら",
+        "弊社",
+        "当方",
+        "当社"
+      ],
+      [
+        "可能性",
+        "と思われ",
+        "おそらく",
+        "と考え"
+      ],
+      [
+        "確実ではあり",
+        "確実ではな",
+        "断定",
+        "100%",
+        "確信"
+      ]
+    ],
+    "must_not": [
+      "そちら側では"
+    ]
+  },
+  {
+    "id": "long-message",
+    "checks": "long message: all 3 points, the back-reference to point 2, every request and hedge kept",
+    "source": "お疲れ様です。先日ご相談した出荷指示登録の件について、3点確認させてください。\n\n1点目：CSVで一括登録する際、送付先住所が4行以上ある場合はどのカラムに保存すればよいでしょうか。現在は住所3までしか項目がありません。\n\n2点目：一部の注文で、送り状番号未付与のまま出荷済ステータスに変更されているケースがありました。ロボットの処理順の問題の可能性がありますが、まだ断定はできません。ログを確認していただけますでしょうか。\n\n3点目：来週のリリースでは、引当解除の一括処理は対応が難しいかと思います。代わりに、一度テスト環境で手動引当を試していただき、問題がないかご確認いただけますでしょうか。\n\nなお、上記2点目の件は優先度が高いため、本日中にご回答いただけると助かります。",
+    "must": [
+      [
+        "three",
+        "3 points",
+        "3 things",
+        "3 items"
+      ],
+      [
+        "which column"
+      ],
+      [
+        "tracking number"
+      ],
+      [
+        "shipped"
+      ],
+      [
+        "log"
+      ],
+      [
+        "not sure",
+        "can't say",
+        "cannot say",
+        "not certain",
+        "cannot be certain",
+        "can't be certain",
+        "definitively",
+        "for certain",
+        "cannot confirm",
+        "can't confirm"
+      ],
+      [
+        "difficult",
+        "hard",
+        "not be able",
+        "unlikely"
+      ],
+      [
+        "try"
+      ],
+      [
+        "today",
+        "end of the day"
+      ],
+      [
+        "second point",
+        "point 2",
+        "item 2",
+        "2nd point",
+        "point two",
+        "second item"
+      ]
+    ],
+    "must_not": [
+      "ma'am",
+      "sir",
+      "reflect"
+    ]
+  },
+  {
+    "id": "greeting-hi",
+    "checks": "お疲れ様です is a plain greeting ('Hi'), never 'thank you for your hard work'",
+    "source": "お疲れ様です。本日のリリースは予定どおり18時に本番環境へ反映します。",
+    "must": [
+      [
+        "hi",
+        "hello"
+      ],
+      [
+        "6 pm",
+        "6pm",
+        "6:00",
+        "18:00",
+        "18時"
+      ],
+      [
+        "production"
+      ]
+    ],
+    "must_not": [
+      "hard work",
+      "thank you for",
+      "reflect"
+    ]
+  },
+  {
+    "id": "freight-collect",
+    "checks": "着払い = freight collect (not cash on delivery); 荷主 = shipper",
+    "source": "この荷主の出荷は、来月からすべて着払いに変更してください。",
+    "must": [
+      [
+        "freight collect",
+        "freight-collect"
+      ],
+      [
+        "shipper"
+      ]
+    ],
+    "must_not": [
+      "cash on delivery",
+      "c.o.d"
+    ]
+  },
+  {
+    "id": "your-side",
+    "checks": "そちら = your side; stays a request",
+    "source": "そちらの環境でも同じエラーが発生しているか確認していただけますか。",
+    "must": [
+      [
+        "your side",
+        "your environment",
+        "your end"
+      ],
+      [
+        "could you",
+        "can you",
+        "would you",
+        "please"
+      ],
+      [
+        "whether",
+        "if the same"
+      ]
+    ],
+    "must_not": [
+      "on our side",
+      "in our environment",
+      "on our end"
+    ]
+  },
+  {
+    "id": "arrival-plain",
+    "checks": "入荷 alone = arrival, never 'receiving'",
+    "source": "明日の入荷は午前中に3件あります。",
+    "must": [
+      [
+        "arriv"
+      ],
+      [
+        "3",
+        "three"
+      ]
+    ],
+    "must_not": [
+      "receiv"
+    ]
+  },
+  {
+    "id": "en-stock-out",
+    "checks": "EN->JA uses 引当 for allocation and 出庫 for stock-out",
+    "source": "Please cancel the allocation before the stock-out is processed.",
+    "must": [
+      [
+        "引当"
+      ],
+      [
+        "出庫"
+      ],
+      [
+        "前"
+      ]
+    ],
+    "must_not": []
+  },
+  {
+    "id": "keeps-lines",
+    "checks": "JA->EN keeps the line and paragraph breaks, even after the お疲れ様です greeting line",
+    "source": "お疲れ様です。\n入荷検品表を印刷してから、引当解除してください。\n\nそちらの環境でも同じエラーが出るか確認していただけますか。",
+    "must": [
+      [
+        "\n\n"
+      ],
+      [
+        "arrival inspection sheet"
+      ],
+      [
+        "your"
+      ]
+    ],
+    "must_not": [
+      "hard work",
+      "on our side",
+      "in our environment"
+    ]
+  },
+  {
+    "id": "en-your-environment",
+    "checks": "EN->JA 'your environment' is the reader's side (そちら), not ours or production",
+    "source": "Does the same error happen in your environment too?",
+    "must": [
+      [
+        "そちら",
+        "貴社",
+        "御社",
+        "ご環境"
+      ]
+    ],
+    "must_not": [
+      "こちらの環境",
+      "本番環境"
+    ]
+  },
+  {
+    "id": "fix-grammar",
+    "fix": true,
+    "checks": "English fixing: corrects grammar, keeps the meaning",
+    "source": "We was deployed the fix yesterday but the robot still not working on test environment.",
+    "must": [
+      [
+        "deployed"
+      ],
+      [
+        "is still not working",
+        "still isn't working",
+        "is not working",
+        "isn't working"
+      ],
+      [
+        "test environment"
+      ]
+    ],
+    "must_not": [
+      "we was",
+      "was deployed"
+    ]
+  },
+  {
+    "id": "fix-keeps-correct",
+    "fix": true,
+    "checks": "English fixing: a correct sentence comes back unchanged",
+    "source": "Could you confirm whether the shipping address field is mandatory?",
+    "must": [
+      [
+        "could you confirm whether the shipping address field is mandatory?"
+      ]
+    ],
+    "must_not": []
+  },
+  {
+    "id": "fix-keeps-code",
+    "fix": true,
+    "checks": "English fixing: code, file names and numbers stay exactly as written",
+    "source": "Set MAX_BATCH_SIZE to 500 in config.yaml and restart worker",
+    "must": [
+      [
+        "max_batch_size"
+      ],
+      [
+        "config.yaml"
+      ],
+      [
+        "500"
+      ],
+      [
+        "restart"
+      ]
+    ],
+    "must_not": []
+  },
+  {
+    "id": "fix-keeps-hedge",
+    "fix": true,
+    "checks": "English fixing: keeps the uncertainty",
+    "source": "i think the issue is maybe in the network side, not sure yet",
+    "must": [
+      [
+        "i think",
+        "probably",
+        "might",
+        "maybe",
+        "may "
+      ],
+      [
+        "not sure",
+        "not certain",
+        "unsure"
+      ],
+      [
+        "network"
+      ]
+    ],
+    "must_not": []
+  }
+]

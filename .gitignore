@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+
+# Personal, per Mac: saved fixes contain client messages (local only, user's decision 5 Oct)
+corrections.jsonl
+corrections.jsonl.bak
+
+# Development stays on the maintainer's Mac: the repo has only what users need to run jt.
+CLAUDE.md
+docs/
+dev/
+# The client's full ja.json review (all app text, company names); jt uses project-glossary.txt.
+project/
+
+# macOS / editor / Claude Code personal settings
+.DS_Store
+.claude/settings.local.json
