@@ -11,10 +11,10 @@ case "$HOST" in http*) ;; *) HOST="http://$HOST" ;; esac
 OLLAMA_APP_URL="https://ollama.com/download/Ollama-darwin.zip"  # Ollama's official, signed Mac app
 APPS_DIR="${JT_APPS_DIR:-/Applications}"                         # where the app goes (~/Applications if not writable)
 # jt's Ollama settings: flash attention and an 8-bit compressed KV cache (what Homebrew's Ollama service runs with:
-# ~2 GB less memory than Ollama's defaults), plus at most 2 prompt snapshots ("context checkpoints") instead of 32
-# (~0.5-0.8 GB less). Same speed and translations (measured 7-8 Oct 2026).
+# ~2 GB less memory than Ollama's defaults), plus at most 8 prompt snapshots ("context checkpoints") instead of 32,
+# so Ollama's cache can't grow past ~1 GB. Same speed and translations (measured 7-8 Oct 2026).
 SETTINGS_AGENT="$HOME/Library/LaunchAgents/com.jt.ollama-settings.plist"
-SETTINGS_HINT="OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0 LLAMA_ARG_CTX_CHECKPOINTS=2 ollama serve"
+SETTINGS_HINT="OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0 LLAMA_ARG_CTX_CHECKPOINTS=8 ollama serve"
 BREW="$(command -v brew || true)"
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -56,7 +56,7 @@ ollama_settings() {
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>launchctl setenv OLLAMA_FLASH_ATTENTION 1; launchctl setenv OLLAMA_KV_CACHE_TYPE q8_0; launchctl setenv LLAMA_ARG_CTX_CHECKPOINTS 2; if pgrep -xq Ollama; then osascript -e 'quit app "Ollama"'; sleep 3; open -g -a "$app"; fi; for s in sh.brew.ollama homebrew.mxcl.ollama; do launchctl kickstart -k gui/$(id -u)/\$s 2&gt;/dev/null; done; true</string>
+    <string>launchctl setenv OLLAMA_FLASH_ATTENTION 1; launchctl setenv OLLAMA_KV_CACHE_TYPE q8_0; launchctl setenv LLAMA_ARG_CTX_CHECKPOINTS 8; if pgrep -xq Ollama; then osascript -e 'quit app "Ollama"'; sleep 3; open -g -a "$app"; fi; for s in sh.brew.ollama homebrew.mxcl.ollama; do launchctl kickstart -k gui/$(id -u)/\$s 2&gt;/dev/null; done; true</string>
   </array>
   <key>RunAtLoad</key><true/>
 </dict>

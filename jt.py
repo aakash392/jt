@@ -10,7 +10,7 @@ jt - local Japanese <-> English translator for any app on your Mac (runs on Olla
   jt --check "text"           also translate the result back, to spot meaning drift
   jt --selftest               run the regression tests in tests.json
   jt --doctor                 check that Ollama and the model are ready
-  jt --warm / jt --stop       load the model and warm it up now / remove it from memory (frees ~9 GB)
+  jt --warm / jt --stop       load the model and warm it up now / remove it from memory (frees ~9.5 GB)
   jt --progress corner        where the hotkey's progress window goes: corner, center or off
   jt --format bilingual       what the hotkey copies: "English: …/Japanese: …" (default) or plain
   jt --keep-loaded 15m        how long the model stays in memory after a translation (default 8h)
@@ -75,7 +75,7 @@ LOAD_OPTIONS = {"num_ctx": int(os.environ.get("JT_NUM_CTX", "8192")),
 CHUNK_ABOVE = 2000    # estimated tokens (~2,000 Japanese characters): longer messages go paragraph by paragraph
 CHUNK_SIZE = 1200     # target tokens per part (a part + the previous part as context + its translation fit 8192)
 KEEP_ALIVE = "8h"     # default: the model stays loaded 8 hours after the last use (a workday). While loaded it pins
-                      # ~9 GB of RAM (7.7 GB locked); `jt --keep-loaded 15m` frees it sooner (see keep_alive())
+                      # ~9.5 GB of RAM (7.7 GB locked); `jt --keep-loaded 15m` frees it sooner (see keep_alive())
 LANG_NAME = {"en": "English", "ja": "Japanese"}
 
 # Per-user state, never shared: the last translation (so the hotkey can tell when the clipboard still holds it),
@@ -315,7 +315,7 @@ def progress_mode():
 
 def keep_alive():
     """How long the model stays in memory after the last translation: JT_KEEP_ALIVE for one run, else
-    `jt --keep-loaded` (saved), else 8h. Shorter frees ~9 GB sooner (helps with Docker); the first translation
+    `jt --keep-loaded` (saved), else 8h. Shorter frees ~9.5 GB sooner (helps with Docker); the first translation
     after that waits for a reload (~15-20 s)."""
     value = os.environ.get("JT_KEEP_ALIVE") or load_settings().get("keep_loaded") or KEEP_ALIVE
     return value if is_duration(value) else KEEP_ALIVE
@@ -478,9 +478,11 @@ OLLAMA_COMMANDS = ("/opt/homebrew/bin/ollama", "/usr/local/bin/ollama") + tuple(
 
 # Ollama settings every jt measurement ran with (Homebrew's Ollama service sets them; install.sh gives them to the
 # app): flash attention and an 8-bit KV cache. Same speed and accuracy, ~2 GB less memory than Ollama's defaults.
-# LLAMA_ARG_CTX_CHECKPOINTS=2: Ollama's model server keeps up to 32 snapshots ("context checkpoints", ~100-130 MB each)
-# per saved prompt; jt's prompt reuse needs 2. Saves ~0.5-0.8 GB, same speed and translations (measured 8 Oct 2026).
-OLLAMA_SETTINGS = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0", "LLAMA_ARG_CTX_CHECKPOINTS": "2"}
+# LLAMA_ARG_CTX_CHECKPOINTS=8: Ollama's model server keeps up to 32 snapshots ("context checkpoints", ~100-170 MB each),
+# so its cache can grow to ~4 GB. 8 caps it at ~1 GB with exactly the same prompt reuse (measured 8 Oct 2026 on long
+# messages). 2 was tried first and broke reuse for long messages: their snapshots evicted the one at the end of jt's
+# instructions, so every request re-read the whole prompt (+11-19 s each).
+OLLAMA_SETTINGS = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0", "LLAMA_ARG_CTX_CHECKPOINTS": "8"}
 
 
 def ollama_command():
@@ -795,6 +797,8 @@ Rules:
   file names, code or technical terms.
 - Keep the tone and the level of politeness. Don't make it longer or more formal than it needs to be.
 - Keep the line breaks, bullet points and blank lines.
+- Only fix real mistakes. Never reword a correct sentence: no synonyms, no restyling, no added words, however long
+  the message is.
 - If the message is already correct, reply with exactly UNCHANGED and nothing else (don't repeat the message).
 - Otherwise output only the corrected message. No notes, no explanations, no quotation marks around it."""
 
@@ -808,6 +812,12 @@ FIX_EXAMPLES = [  # (as written, corrected): the model follows examples better t
      "anything looks wrong?\n\nThanks!", "UNCHANGED"),
     ("Hi,\n- order ORD-2026-00871 not showing in list\n- also the stock_qty is null for 3 items, is it expected?",
      "Hi,\n- Order ORD-2026-00871 isn't showing in the list.\n- Also, stock_qty is NULL for 3 items. Is that expected?"),
+    # A long, correctly written message is left alone too (without this, messages of ~100+ words got reworded:
+    # "tell us" -> "let us know", "right" -> "correct"; end-to-end test, 8 Oct 2026).
+    ("Hi team,\n\nThanks for the update. We reviewed the new picking list layout this morning, and it looks good "
+     "overall.\n\nTwo small points:\n1. The product code column is cut off when the code is longer than 12 "
+     "characters.\n2. The total quantity at the bottom should include items that are on hold.\n\nCould you fix these "
+     "before Wednesday? Once they are done, we will run the full test with the warehouse team.", "UNCHANGED"),
 ]
 
 
@@ -1414,7 +1424,7 @@ def mode_doctor():
     print("Glossary    : %d terms (%s)" % (len(load_glossary()), GLOSSARY_FILE.name))
     print("Project     : %d terms (%s, only matching ones are sent)" % (len(load_project_terms()), PROJECT_FILE.name))
     print("Format      : %s (change with: jt --format bilingual|plain)" % output_format())
-    print("Keep loaded : %s after the last translation (~9 GB while loaded; change with: jt --keep-loaded 15m)" % keep_alive())
+    print("Keep loaded : %s after the last translation (~9.5 GB while loaded; change with: jt --keep-loaded 15m)" % keep_alive())
     print("Recent speed: %s" % (timing_summary() or "no hotkey translations logged yet"))
     print("Cache       : %s" % cache_summary())
     if platform.system() == "Darwin":
@@ -1464,10 +1474,10 @@ def ollama_settings_status():
     missing = []
     if not any("--cache-type-k q8_0" in s[-1] for s in servers):
         missing.append("compressed memory (~2 GB)")
-    if "LLAMA_ARG_CTX_CHECKPOINTS=2" not in env:
-        missing.append("fewer prompt snapshots (~0.5-0.8 GB)")
+    if "LLAMA_ARG_CTX_CHECKPOINTS=%s " % OLLAMA_SETTINGS["LLAMA_ARG_CTX_CHECKPOINTS"] not in env + " ":
+        missing.append("a cap on prompt snapshots")
     if not missing:
-        return "OK (compressed memory, fewer prompt snapshots)"
+        return "OK (compressed memory, prompt snapshots capped)"
     return "missing %s: run  bash ~/jt/install.sh  again" % " and ".join(missing)
 
 
@@ -1555,7 +1565,7 @@ def unload_model():
 
 def mode_stop():
     if unload_model():
-        print("Model removed from memory (about 9 GB freed). It loads again automatically on the next translation.")
+        print("Model removed from memory (about 9.5 GB freed). It loads again automatically on the next translation.")
     else:
         print("The model wasn't loaded, so there was nothing to free.")
 
@@ -1590,7 +1600,7 @@ def _main():
     p.add_argument("--selftest", action="store_true", help="run the regression tests in tests.json")
     p.add_argument("--doctor", action="store_true", help="check Ollama and the model")
     p.add_argument("--warm", action="store_true", help="load the model now so the next translation is fast")
-    p.add_argument("--stop", action="store_true", help="remove the model from memory now (frees ~9 GB of RAM)")
+    p.add_argument("--stop", action="store_true", help="remove the model from memory now (frees ~9.5 GB of RAM)")
     p.add_argument("--warm-prompts", nargs="*", metavar="SKIP", help=argparse.SUPPRESS)  # internal: see warm_in_background
     p.add_argument("--clear-cache", action="store_true", help="forget the remembered hotkey translations")
     p.add_argument("--keep-loaded", metavar="TIME",
@@ -1614,7 +1624,7 @@ def _main():
         if not is_duration(args.keep_loaded):
             raise JtError("--keep-loaded needs a time like 15m, 1h or 8h")
         save_setting("keep_loaded", args.keep_loaded)
-        print("The model will stay in memory for %s after each translation (~9 GB while loaded), then free it. "
+        print("The model will stay in memory for %s after each translation (~9.5 GB while loaded), then free it. "
               "The first translation after that waits for a reload (~15-20 s)." % args.keep_loaded)
         return None
     if args.output_format:
