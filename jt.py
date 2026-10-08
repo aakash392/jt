@@ -10,7 +10,7 @@ jt - local Japanese <-> English translator for any app on your Mac (runs on Olla
   jt --check "text"           also translate the result back, to spot meaning drift
   jt --selftest               run the regression tests in tests.json
   jt --doctor                 check that Ollama and the model are ready
-  jt --warm / jt --stop       load the model and warm it up now / remove it from memory (frees ~7.6 GB)
+  jt --warm / jt --stop       load the model and warm it up now / remove it from memory (frees ~10 GB)
   jt --progress corner        where the hotkey's progress window goes: corner, center or off
   jt --format bilingual       what the hotkey copies: "English: …/Japanese: …" (default) or plain
   jt --keep-loaded 15m        how long the model stays in memory after a translation (default 8h)
@@ -73,7 +73,7 @@ LOAD_OPTIONS = {"num_ctx": int(os.environ.get("JT_NUM_CTX", "8192")),
 CHUNK_ABOVE = 2000    # estimated tokens (~2,000 Japanese characters): longer messages go paragraph by paragraph
 CHUNK_SIZE = 1200     # target tokens per part (a part + the previous part as context + its translation fit 8192)
 KEEP_ALIVE = "8h"     # default: the model stays loaded 8 hours after the last use (a workday). While loaded it pins
-                      # ~7.6 GB of RAM; `jt --keep-loaded 15m` frees it sooner (see keep_alive())
+                      # ~10 GB of RAM (8 GB locked); `jt --keep-loaded 15m` frees it sooner (see keep_alive())
 LANG_NAME = {"en": "English", "ja": "Japanese"}
 
 # Per-user state, never shared: the last translation (so the hotkey can tell when the clipboard still holds it),
@@ -313,7 +313,7 @@ def progress_mode():
 
 def keep_alive():
     """How long the model stays in memory after the last translation: JT_KEEP_ALIVE for one run, else
-    `jt --keep-loaded` (saved), else 8h. Shorter frees ~7.6 GB sooner (helps with Docker); the first translation
+    `jt --keep-loaded` (saved), else 8h. Shorter frees ~10 GB sooner (helps with Docker); the first translation
     after that waits for a reload (~15-20 s)."""
     value = os.environ.get("JT_KEEP_ALIVE") or load_settings().get("keep_loaded") or KEEP_ALIVE
     return value if is_duration(value) else KEEP_ALIVE
@@ -1370,7 +1370,7 @@ def mode_doctor():
     print("Glossary    : %d terms (%s)" % (len(load_glossary()), GLOSSARY_FILE.name))
     print("Project     : %d terms (%s, only matching ones are sent)" % (len(load_project_terms()), PROJECT_FILE.name))
     print("Format      : %s (change with: jt --format bilingual|plain)" % output_format())
-    print("Keep loaded : %s after the last translation (~7.6 GB while loaded; change with: jt --keep-loaded 15m)" % keep_alive())
+    print("Keep loaded : %s after the last translation (~10 GB while loaded; change with: jt --keep-loaded 15m)" % keep_alive())
     print("Recent speed: %s" % (timing_summary() or "no hotkey translations logged yet"))
     print("Cache       : %s" % cache_summary())
     if platform.system() == "Darwin":
@@ -1503,7 +1503,7 @@ def unload_model():
 
 def mode_stop():
     if unload_model():
-        print("Model removed from memory (about 7.6 GB freed). It loads again automatically on the next translation.")
+        print("Model removed from memory (about 10 GB freed). It loads again automatically on the next translation.")
     else:
         print("The model wasn't loaded, so there was nothing to free.")
 
@@ -1538,7 +1538,7 @@ def _main():
     p.add_argument("--selftest", action="store_true", help="run the regression tests in tests.json")
     p.add_argument("--doctor", action="store_true", help="check Ollama and the model")
     p.add_argument("--warm", action="store_true", help="load the model now so the next translation is fast")
-    p.add_argument("--stop", action="store_true", help="remove the model from memory now (frees ~7.6 GB of RAM)")
+    p.add_argument("--stop", action="store_true", help="remove the model from memory now (frees ~10 GB of RAM)")
     p.add_argument("--warm-prompts", nargs="*", metavar="SKIP", help=argparse.SUPPRESS)  # internal: see warm_in_background
     p.add_argument("--clear-cache", action="store_true", help="forget the remembered hotkey translations")
     p.add_argument("--keep-loaded", metavar="TIME",
@@ -1562,7 +1562,7 @@ def _main():
         if not is_duration(args.keep_loaded):
             raise JtError("--keep-loaded needs a time like 15m, 1h or 8h")
         save_setting("keep_loaded", args.keep_loaded)
-        print("The model will stay in memory for %s after each translation (~7.6 GB while loaded), then free it. "
+        print("The model will stay in memory for %s after each translation (~10 GB while loaded), then free it. "
               "The first translation after that waits for a reload (~15-20 s)." % args.keep_loaded)
         return None
     if args.output_format:

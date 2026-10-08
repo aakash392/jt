@@ -114,7 +114,8 @@ both directions: English messages are matched on the English side.
 
 ## Free up memory when you need it
 
-While loaded, the model holds about 7.6 GB of RAM (for 8 hours after the last use). Before something
+While loaded, jt holds about 10 GB of RAM, 8 GB of which macOS can't move to disk (for 8 hours after the last use).
+Before something
 memory-heavy (Docker, large builds, screen-sharing in a big call), remove it from memory:
 
 ```bash
@@ -134,7 +135,7 @@ If translations ever seem slow or stuck, `jt --doctor` shows your recent speeds 
 
 ## Using jt with Docker (developers)
 
-While loaded, the model needs about 7.6 GB that macOS can't move to disk, and Docker's VM takes as much memory as you
+While loaded, jt needs about 10 GB, 8 GB of which macOS can't move to disk, and Docker's VM takes as much memory as you
 allow it. If the two leave too little for macOS and your apps, the Mac swaps and translations take 10–50 s instead of
 a few seconds.
 
@@ -187,4 +188,4 @@ This gives you the latest jt, glossary, examples and tests (no reinstall needed)
 | model isn't installed | `ollama pull gemma4:12b-it-qat` |
 | "Failed to load CLIP model" | Your Ollama can't load the model's image part (Ollama 0.40 with this model). Update jt (`cd ~/jt && git pull`): it then makes a text-only copy of the model once (about 20 seconds, nothing downloaded) and uses that. |
 | Japanese shows as garbage in the hotkey | Make sure the command uses `/usr/bin/python3` and the `jt.py` from this folder |
-| Slow first translation | Normal: the model loads into memory (a few seconds), then it stays ready for 8 hours after the last use (about 7.6 GB of RAM while loaded; freed after 8 idle hours or at shutdown). Run `jt --warm` to load it ahead of time. Memory tight? `jt --keep-loaded 30m` |
+| Slow first translation | Normal: the model loads into memory (a few seconds), then it stays ready for 8 hours after the last use (about 10 GB of RAM while loaded; freed after 8 idle hours or at shutdown). Run `jt --warm` to load it ahead of time. Memory tight? `jt --keep-loaded 30m` |
