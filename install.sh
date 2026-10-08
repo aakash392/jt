@@ -10,10 +10,11 @@ HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 case "$HOST" in http*) ;; *) HOST="http://$HOST" ;; esac
 OLLAMA_APP_URL="https://ollama.com/download/Ollama-darwin.zip"  # Ollama's official, signed Mac app
 APPS_DIR="${JT_APPS_DIR:-/Applications}"                         # where the app goes (~/Applications if not writable)
-# The settings Homebrew's Ollama service runs with, and every jt test ran with: flash attention and an 8-bit
-# compressed KV cache. Same speed and accuracy as Ollama's defaults, about 2 GB less memory (measured 7 Oct 2026).
+# jt's Ollama settings: flash attention and an 8-bit compressed KV cache (what Homebrew's Ollama service runs with:
+# ~2 GB less memory than Ollama's defaults), plus at most 2 prompt snapshots ("context checkpoints") instead of 32
+# (~0.5-0.8 GB less). Same speed and translations (measured 7-8 Oct 2026).
 SETTINGS_AGENT="$HOME/Library/LaunchAgents/com.jt.ollama-settings.plist"
-SETTINGS_HINT="OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0 ollama serve"
+SETTINGS_HINT="OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0 LLAMA_ARG_CTX_CHECKPOINTS=2 ollama serve"
 BREW="$(command -v brew || true)"
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -40,9 +41,9 @@ find_ollama() {
 
 brew_ollama() { [ -n "$BREW" ] && "$BREW" list --formula ollama >/dev/null 2>&1; }
 
-# The Ollama app reads its settings from launchd. A small login item sets them at every login and restarts the app
-# if it was already running without them; loading it now applies them straight away.
-app_settings() {
+# Ollama (the app or Homebrew's service) reads its settings from launchd. A small login item sets them at every login
+# and restarts whichever Ollama is already running without them; loading it now applies them straight away.
+ollama_settings() {
   local app="$1"
   mkdir -p "$(dirname "$SETTINGS_AGENT")"
   cat > "$SETTINGS_AGENT" <<EOF
@@ -55,7 +56,7 @@ app_settings() {
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>launchctl setenv OLLAMA_FLASH_ATTENTION 1; launchctl setenv OLLAMA_KV_CACHE_TYPE q8_0; if pgrep -xq Ollama; then osascript -e 'quit app "Ollama"'; sleep 3; open -g -a "$app"; fi</string>
+    <string>launchctl setenv OLLAMA_FLASH_ATTENTION 1; launchctl setenv OLLAMA_KV_CACHE_TYPE q8_0; launchctl setenv LLAMA_ARG_CTX_CHECKPOINTS 2; if pgrep -xq Ollama; then osascript -e 'quit app "Ollama"'; sleep 3; open -g -a "$app"; fi; for s in sh.brew.ollama homebrew.mxcl.ollama; do launchctl kickstart -k gui/$(id -u)/\$s 2&gt;/dev/null; done; true</string>
   </array>
   <key>RunAtLoad</key><true/>
 </dict>
@@ -63,7 +64,7 @@ app_settings() {
 EOF
   launchctl bootout "gui/$(id -u)" "$SETTINGS_AGENT" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$SETTINGS_AGENT"
-  echo "Gave the Ollama app jt's memory settings (login item: $SETTINGS_AGENT)."
+  echo "Gave Ollama jt's memory settings (login item: $SETTINGS_AGENT)."
 }
 
 install_ollama() {
@@ -115,12 +116,13 @@ case "$HOST" in
       # Exactly one Ollama, with jt's settings: the app if it's in use or installed, else Homebrew's service
       # (which has the settings built in). Never both: they would fight over the same port.
       if APP="$(find_app)" && { pgrep -xq Ollama || ! brew_ollama; }; then
-        app_settings "$APP"
+        ollama_settings "$APP"
         KIND=app
       elif brew_ollama; then
         "$BREW" services start ollama >/dev/null
+        ollama_settings ""
         KIND=brew
-        echo "Ollama runs as Homebrew's background service (it has jt's memory settings built in)."
+        echo "Ollama runs as Homebrew's background service."
       else
         echo "Note: this Ollama isn't the app or Homebrew's, so jt can't give it its memory settings."
         echo "      When jt starts it, it passes them itself; to set them always: $SETTINGS_HINT"

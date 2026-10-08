@@ -10,7 +10,7 @@ jt - local Japanese <-> English translator for any app on your Mac (runs on Olla
   jt --check "text"           also translate the result back, to spot meaning drift
   jt --selftest               run the regression tests in tests.json
   jt --doctor                 check that Ollama and the model are ready
-  jt --warm / jt --stop       load the model and warm it up now / remove it from memory (frees ~10 GB)
+  jt --warm / jt --stop       load the model and warm it up now / remove it from memory (frees ~9 GB)
   jt --progress corner        where the hotkey's progress window goes: corner, center or off
   jt --format bilingual       what the hotkey copies: "English: …/Japanese: …" (default) or plain
   jt --keep-loaded 15m        how long the model stays in memory after a translation (default 8h)
@@ -55,9 +55,11 @@ MAX_TERMS = 25    # most project terms sent with one message (keeps the prompt s
 # Settings Ollama loads the model with. They must be the same on EVERY request: a different value makes
 # Ollama reload the whole model first (~7 s), so jt never varies them per message.
 # num_ctx: Ollama's default (4096) silently drops the START of a prompt that doesn't fit, which is where the
-#   rules and glossary are. 8192 fits the prompt plus any message below CHUNK_ABOVE and its translation.
+#   rules and glossary are. num_ctx fits the prompt plus any message below CHUNK_ABOVE and its translation.
 #   Ollama's own size estimate hides it, but the context is pinned memory: gemma4:12b-it-qat pins 7.34 GB at 4096,
-#   7.59 GB at 8192 and 7.94 GB at 16384 (measured 7 Oct 2026). 8192 keeps 2-6 paragraph messages whole.
+#   7.59 GB at 8192 and 7.94 GB at 16384 (measured 7 Oct 2026, before the 8-bit KV cache). 8192 keeps 2-6 paragraph
+#   messages whole. With the 8-bit KV cache, 4096 saves only ~34 MB (measured 8 Oct), so it isn't worth splitting
+#   messages over ~900 characters: tried and reverted the same day.
 # num_batch: Ollama can only reuse a cached prompt on these models up to a checkpoint one batch before the
 #   end (qwen3.5 is hybrid, gemma4 uses sliding-window layers). With the default batch the whole ~750-token
 #   prompt was re-read for every message (5-8 s); with 64 almost all of it is reused (2-3 s, same output).
@@ -73,7 +75,7 @@ LOAD_OPTIONS = {"num_ctx": int(os.environ.get("JT_NUM_CTX", "8192")),
 CHUNK_ABOVE = 2000    # estimated tokens (~2,000 Japanese characters): longer messages go paragraph by paragraph
 CHUNK_SIZE = 1200     # target tokens per part (a part + the previous part as context + its translation fit 8192)
 KEEP_ALIVE = "8h"     # default: the model stays loaded 8 hours after the last use (a workday). While loaded it pins
-                      # ~10 GB of RAM (8 GB locked); `jt --keep-loaded 15m` frees it sooner (see keep_alive())
+                      # ~9 GB of RAM (7.7 GB locked); `jt --keep-loaded 15m` frees it sooner (see keep_alive())
 LANG_NAME = {"en": "English", "ja": "Japanese"}
 
 # Per-user state, never shared: the last translation (so the hotkey can tell when the clipboard still holds it),
@@ -313,7 +315,7 @@ def progress_mode():
 
 def keep_alive():
     """How long the model stays in memory after the last translation: JT_KEEP_ALIVE for one run, else
-    `jt --keep-loaded` (saved), else 8h. Shorter frees ~10 GB sooner (helps with Docker); the first translation
+    `jt --keep-loaded` (saved), else 8h. Shorter frees ~9 GB sooner (helps with Docker); the first translation
     after that waits for a reload (~15-20 s)."""
     value = os.environ.get("JT_KEEP_ALIVE") or load_settings().get("keep_loaded") or KEEP_ALIVE
     return value if is_duration(value) else KEEP_ALIVE
@@ -476,7 +478,9 @@ OLLAMA_COMMANDS = ("/opt/homebrew/bin/ollama", "/usr/local/bin/ollama") + tuple(
 
 # Ollama settings every jt measurement ran with (Homebrew's Ollama service sets them; install.sh gives them to the
 # app): flash attention and an 8-bit KV cache. Same speed and accuracy, ~2 GB less memory than Ollama's defaults.
-OLLAMA_SETTINGS = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0"}
+# LLAMA_ARG_CTX_CHECKPOINTS=2: Ollama's model server keeps up to 32 snapshots ("context checkpoints", ~100-130 MB each)
+# per saved prompt; jt's prompt reuse needs 2. Saves ~0.5-0.8 GB, same speed and translations (measured 8 Oct 2026).
+OLLAMA_SETTINGS = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0", "LLAMA_ARG_CTX_CHECKPOINTS": "2"}
 
 
 def ollama_command():
@@ -487,18 +491,47 @@ def ollama_command():
     return None
 
 
-# Ollama 0.40 can't load the image part (its "CLIP model") of gemma4:12b-it-qat: "image_max_pixels (147456) is less
-# than image_min_pixels (161280)" (found 7 Oct 2026; older Ollama loads it fine). jt never sends images, so on such an
-# Ollama it makes a text-only copy of the model once (the same weights file, without the image part; nothing is
-# downloaded) and uses that from then on. Self-test 28/28 with the copy on Ollama 0.40.0.
+# jt never sends images, so it uses a text-only copy of the model: the same weights file without the image part
+# ("CLIP model"), made once per Mac (~3 s, nothing downloaded). It saves ~0.3 GB of locked memory with identical
+# translations (12 of 12 word for word, 8 Oct 2026), and Ollama 0.40 can't load gemma4:12b-it-qat's image part at all
+# ("image_max_pixels (147456) is less than image_min_pixels (161280)", 7 Oct). A model without an image part, or one
+# whose copy can't be made (e.g. an Ollama on another computer), is used as it is.
+TEXT_ONLY = os.environ.get("JT_TEXT_ONLY", "1") != "0"  # dev/bench.py turns it off to measure models as published
+_prepared = False
+
+
 def text_only_name(model):
     name, _, tag = model.partition(":")
     return "%s-text:%s" % (name, tag or "latest")
 
 
 def active_model():
-    """The model jt sends requests to: MODEL, or its text-only copy on an Ollama that can't load MODEL's image part."""
+    """The model jt sends requests to: MODEL's text-only copy once it's made (see prepare_model), else MODEL."""
     return text_only_name(MODEL) if load_settings().get("text_only_for") == MODEL else MODEL
+
+
+def prepare_model():
+    """Once per Mac and model, before the first request: switch to the text-only copy. Never fails: if the copy can't
+    be made, the full model is used (and remembered, so it isn't tried again)."""
+    global _prepared
+    if _prepared or not TEXT_ONLY:
+        return
+    _prepared = True
+    settings = load_settings()
+    if settings.get("text_only_for") == MODEL or MODEL in settings.get("full_model_for", []):
+        return
+    try:
+        modelfile = _show_modelfile()
+    except (OSError, ValueError):
+        return  # Ollama isn't running or the model isn't pulled yet: decide next time
+    if not modelfile:
+        return
+    try:
+        _make_text_only_copy(modelfile)
+    except JtError:
+        save_setting("full_model_for", sorted(set(settings.get("full_model_for", [])) | {MODEL}))
+        return
+    save_setting("text_only_for", MODEL)
 
 
 def image_part_failed(error_body):
@@ -506,15 +539,26 @@ def image_part_failed(error_body):
     return "clip model" in low or "mmproj" in low
 
 
+def _show_modelfile():
+    with urllib.request.urlopen(urllib.request.Request(
+            HOST + "/api/show", data=json.dumps({"model": MODEL}).encode("utf-8"),
+            headers={"Content-Type": "application/json"}), timeout=30) as resp:
+        return json.loads(resp.read().decode("utf-8")).get("modelfile", "")
+
+
 def use_text_only_copy():
-    """Make the text-only copy of MODEL (if it isn't there yet) and use it from now on, on this Mac."""
+    """Make the text-only copy of MODEL (if it isn't there yet) and use it from now on, on this Mac. For an Ollama
+    that can't load the image part, where there is no going back to the full model: errors are shown."""
     try:
-        with urllib.request.urlopen(urllib.request.Request(
-                HOST + "/api/show", data=json.dumps({"model": MODEL}).encode("utf-8"),
-                headers={"Content-Type": "application/json"}), timeout=30) as resp:
-            modelfile = json.loads(resp.read().decode("utf-8")).get("modelfile", "")
+        modelfile = _show_modelfile()
     except (OSError, ValueError) as e:
         raise JtError("Ollama couldn't load the model's image part, and jt couldn't read the model to work around it: %s" % e)
+    _make_text_only_copy(modelfile)
+    save_setting("text_only_for", MODEL)
+
+
+def _make_text_only_copy(modelfile):
+    """`ollama create` the copy: MODEL's Modelfile without the smaller FROM (the image part). Raises JtError."""
     sources = re.findall(r"^FROM (.+)$", modelfile, flags=re.M)
     files = [f for f in sources if os.path.isfile(f)]
     cli = ollama_command()
@@ -540,7 +584,6 @@ def use_text_only_copy():
     if res.returncode != 0:
         raise JtError("couldn't make the text-only copy of the model: %s"
                       % res.stderr.decode("utf-8", "replace").strip()[-300:])
-    save_setting("text_only_for", MODEL)
 
 
 def start_ollama(wait=20):
@@ -574,6 +617,7 @@ def chat(messages, progress=None):
     """One request to Ollama. With a `progress` (TranslationProgress), the answer is streamed so the progress window
     can show it being written; otherwise it arrives in one piece."""
     global _think_param_ok, _start_tried, _copy_remade
+    prepare_model()
     payload = {
         "model": active_model(),
         "messages": messages,
@@ -1363,14 +1407,14 @@ def mode_doctor():
     if wanted in names:
         print("Model       : %s installed" % MODEL)
         if active_model() != MODEL:
-            print("              using its text-only copy %s (this Ollama can't load the model's image part, "
-                  "which jt doesn't use)" % active_model())
+            print("              using its text-only copy %s (without the image part, which jt never uses: "
+                  "~0.3 GB less memory, same translations)" % active_model())
     else:
         print("Model       : %s NOT installed - run: ollama pull %s" % (MODEL, MODEL))
     print("Glossary    : %d terms (%s)" % (len(load_glossary()), GLOSSARY_FILE.name))
     print("Project     : %d terms (%s, only matching ones are sent)" % (len(load_project_terms()), PROJECT_FILE.name))
     print("Format      : %s (change with: jt --format bilingual|plain)" % output_format())
-    print("Keep loaded : %s after the last translation (~10 GB while loaded; change with: jt --keep-loaded 15m)" % keep_alive())
+    print("Keep loaded : %s after the last translation (~9 GB while loaded; change with: jt --keep-loaded 15m)" % keep_alive())
     print("Recent speed: %s" % (timing_summary() or "no hotkey translations logged yet"))
     print("Cache       : %s" % cache_summary())
     if platform.system() == "Darwin":
@@ -1406,18 +1450,25 @@ def hotkey_status():
 
 
 def ollama_settings_status():
-    """Whether Ollama runs the model with jt's memory settings, read from its model server's command line."""
+    """Whether Ollama runs the model with jt's memory settings: read from its model server's command line and
+    environment (`ps -E`)."""
     try:
-        args = subprocess.run(["ps", "-axo", "args"], capture_output=True, text=True, timeout=10).stdout
-    except (OSError, subprocess.SubprocessError):
+        lines = subprocess.run(["ps", "-axo", "pid=,args="], capture_output=True, text=True, timeout=10).stdout
+        servers = [l.split(None, 1) for l in lines.splitlines() if "llama-server" in l or "ollama runner" in l]
+        if not servers:
+            return "can't tell until the model is loaded (run: jt --warm)"
+        env = subprocess.run(["ps", "-E", "-ww", "-o", "command=", "-p", servers[0][0]], capture_output=True,
+                             text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError, IndexError):
         return "unknown"
-    servers = [l for l in args.splitlines() if "llama-server" in l or "ollama runner" in l]
-    if not servers:
-        return "can't tell until the model is loaded (run: jt --warm)"
-    if any("--cache-type-k q8_0" in l for l in servers):
-        return "OK (compressed memory: 8-bit KV cache with flash attention)"
-    return ("OFF: the model uses ~2 GB more memory than it needs. Run  bash ~/jt/install.sh  again "
-            "(or start Ollama with OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0)")
+    missing = []
+    if not any("--cache-type-k q8_0" in s[-1] for s in servers):
+        missing.append("compressed memory (~2 GB)")
+    if "LLAMA_ARG_CTX_CHECKPOINTS=2" not in env:
+        missing.append("fewer prompt snapshots (~0.5-0.8 GB)")
+    if not missing:
+        return "OK (compressed memory, fewer prompt snapshots)"
+    return "missing %s: run  bash ~/jt/install.sh  again" % " and ".join(missing)
 
 
 def memory_status():
@@ -1460,6 +1511,7 @@ def warm_in_background(skip):
 def load_model():
     """Load the model into memory with the same settings translations use (switching to the text-only copy if this
     Ollama can't load the model's image part)."""
+    prepare_model()
     payload = {"model": active_model(), "messages": [], "keep_alive": keep_alive(), "options": LOAD_OPTIONS}
     req = urllib.request.Request(HOST + "/api/chat", data=json.dumps(payload).encode("utf-8"),
                                  headers={"Content-Type": "application/json"})
@@ -1503,7 +1555,7 @@ def unload_model():
 
 def mode_stop():
     if unload_model():
-        print("Model removed from memory (about 10 GB freed). It loads again automatically on the next translation.")
+        print("Model removed from memory (about 9 GB freed). It loads again automatically on the next translation.")
     else:
         print("The model wasn't loaded, so there was nothing to free.")
 
@@ -1538,7 +1590,7 @@ def _main():
     p.add_argument("--selftest", action="store_true", help="run the regression tests in tests.json")
     p.add_argument("--doctor", action="store_true", help="check Ollama and the model")
     p.add_argument("--warm", action="store_true", help="load the model now so the next translation is fast")
-    p.add_argument("--stop", action="store_true", help="remove the model from memory now (frees ~10 GB of RAM)")
+    p.add_argument("--stop", action="store_true", help="remove the model from memory now (frees ~9 GB of RAM)")
     p.add_argument("--warm-prompts", nargs="*", metavar="SKIP", help=argparse.SUPPRESS)  # internal: see warm_in_background
     p.add_argument("--clear-cache", action="store_true", help="forget the remembered hotkey translations")
     p.add_argument("--keep-loaded", metavar="TIME",
@@ -1562,7 +1614,7 @@ def _main():
         if not is_duration(args.keep_loaded):
             raise JtError("--keep-loaded needs a time like 15m, 1h or 8h")
         save_setting("keep_loaded", args.keep_loaded)
-        print("The model will stay in memory for %s after each translation (~10 GB while loaded), then free it. "
+        print("The model will stay in memory for %s after each translation (~9 GB while loaded), then free it. "
               "The first translation after that waits for a reload (~15-20 s)." % args.keep_loaded)
         return None
     if args.output_format:
